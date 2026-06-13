@@ -234,16 +234,80 @@ describe('Wikipedia adapter', () => {
     expect(String(url)).toContain('origin=*');
   });
 
-  it('ignores includeContent and returns snippets only', async () => {
-    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => jsonResponse({
-      query: {
-        search: [
-          { title: 'Compound interest', snippet: 'the addition of interest to principal' },
-        ],
-      },
-    }));
+  it('fetches intro extracts for all results when includeContent is set', async () => {
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL, _init?: RequestInit) => {
+      if (String(url).includes('prop=extracts')) {
+        return jsonResponse({
+          query: {
+            pages: {
+              '1234': { title: 'Compound interest', extract: 'Compound interest is the addition of interest to principal.' },
+            },
+          },
+        });
+      }
+      return jsonResponse({
+        query: {
+          search: [{ title: 'Compound interest', snippet: 'the addition of <span>interest</span> to principal' }],
+        },
+      });
+    });
 
-    const results = await wikipediaProvider.search('public data', {
+    const results = await wikipediaProvider.search('compound interest', {
+      maxResults: 1,
+      apiKey: '',
+      includeContent: true,
+      signal: new AbortController().signal,
+      fetchImpl,
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].content).toBe('Compound interest is the addition of interest to principal.');
+    expect(results[0].snippet).toBe('the addition of interest to principal');
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const [extractsUrl] = fetchImpl.mock.calls[1];
+    expect(String(extractsUrl)).toContain('prop=extracts');
+    expect(String(extractsUrl)).toContain('explaintext=1');
+    expect(String(extractsUrl)).toContain('exintro=1');
+    expect(String(extractsUrl)).toContain('origin=*');
+    expect(String(extractsUrl)).toContain('Compound+interest');
+  });
+
+  it('caps extract content at MAX_RESULT_CONTENT_CHARS', async () => {
+    const longExtract = 'word '.repeat(2000);
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL, _init?: RequestInit) => {
+      if (String(url).includes('prop=extracts')) {
+        return jsonResponse({
+          query: { pages: { '1': { title: 'Compound interest', extract: longExtract } } },
+        });
+      }
+      return jsonResponse({
+        query: { search: [{ title: 'Compound interest', snippet: 'snippet' }] },
+      });
+    });
+
+    const results = await wikipediaProvider.search('compound interest', {
+      maxResults: 1,
+      apiKey: '',
+      includeContent: true,
+      signal: new AbortController().signal,
+      fetchImpl,
+    });
+
+    expect(results[0].content!.startsWith(longExtract.slice(0, MAX_RESULT_CONTENT_CHARS))).toBe(true);
+    expect(results[0].content!.endsWith('[truncated: article continues beyond this point]')).toBe(true);
+  });
+
+  it('falls back to snippets only if the extracts call fails', async () => {
+    let callCount = 0;
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => {
+      callCount++;
+      if (callCount === 2) throw new Error('network error');
+      return jsonResponse({
+        query: { search: [{ title: 'Compound interest', snippet: 'the addition of interest to principal' }] },
+      });
+    });
+
+    const results = await wikipediaProvider.search('compound interest', {
       maxResults: 1,
       apiKey: '',
       includeContent: true,
@@ -254,6 +318,22 @@ describe('Wikipedia adapter', () => {
     expect(results).toHaveLength(1);
     expect(results[0].content).toBeUndefined();
     expect(results[0].snippet).toBe('the addition of interest to principal');
+  });
+
+  it('skips the extracts call when includeContent is not set', async () => {
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => jsonResponse({
+      query: { search: [{ title: 'Compound interest', snippet: 'the addition of interest to principal' }] },
+    }));
+
+    const results = await wikipediaProvider.search('compound interest', {
+      maxResults: 1,
+      apiKey: '',
+      signal: new AbortController().signal,
+      fetchImpl,
+    });
+
+    expect(results[0].content).toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });
 
