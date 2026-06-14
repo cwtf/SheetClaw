@@ -12,6 +12,7 @@ export interface UsageIndex {
 }
 
 function pruneOldBuckets(today: string): void {
+  if (typeof localStorage === 'undefined') return;
   const cutoff = new Date(today);
   cutoff.setDate(cutoff.getDate() - ROLLING_DAYS);
   const cutoffStr = cutoff.toISOString().slice(0, 10);

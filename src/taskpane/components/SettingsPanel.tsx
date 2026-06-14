@@ -19,6 +19,7 @@ import {
 } from '@fluentui/react-components';
 import { useStore } from '../../store/index';
 import { createAdapter } from '../../adapters/index';
+import { getOllamaBrowserAccessCommand, isOllamaBrowserAccessError } from '../../adapters/ollama';
 import type { AuthState, ProviderConfig, ProviderKey } from '../../types';
 import { getAuthCredential } from '../../auth/credentials';
 import { signInWithOpenRouter } from '../../auth/oauthFlow';
@@ -499,7 +500,7 @@ function ProviderForm({
       || providerKey === 'anthropic'
       || !!getAuthCredential(auth);
     if (!canLoad) return;
-    void fetchModels(cfg.baseUrl, getAuthCredential(auth));
+    void fetchModels(cfg.baseUrl, getAuthCredential(auth)).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -536,7 +537,7 @@ function ProviderForm({
     } catch (e) {
       setLoadState('error');
       setLoadError(e instanceof Error ? e.message : String(e));
-      return [];
+      throw e;
     }
   }
 
@@ -548,9 +549,9 @@ function ProviderForm({
       const ids = await fetchModels(baseUrl, key);
       setTestStatus('ok');
       setTestMsg(`Connected - ${ids.length} model${ids.length !== 1 ? 's' : ''} available`);
-    } catch {
+    } catch (e) {
       setTestStatus('error');
-      setTestMsg(loadError || 'Connection failed');
+      setTestMsg(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -651,7 +652,7 @@ function ProviderForm({
               size="small"
               appearance="subtle"
               title="Refresh model list"
-              onClick={() => void fetchModels(baseUrl, getAuthCredential(auth))}
+              onClick={() => void fetchModels(baseUrl, getAuthCredential(auth)).catch(() => undefined)}
             >Refresh</Button>
           </div>
         ) : (
@@ -669,7 +670,7 @@ function ProviderForm({
               appearance="subtle"
               title="Fetch available models"
               disabled={needsKey && !keySet && !apiKey}
-              onClick={() => void fetchModels(baseUrl, apiKey || getAuthCredential(auth))}
+              onClick={() => void fetchModels(baseUrl, apiKey || getAuthCredential(auth)).catch(() => undefined)}
             >Refresh</Button>
           </div>
         )}
@@ -757,7 +758,11 @@ function ProviderForm({
       {providerKey === 'ollama' && (loadState === 'error' || testStatus === 'error') && (
         <MessageBar intent="warning">
           <MessageBarBody>
-            <Caption1>Ollama may not be running. Start it with:</Caption1>
+            <Caption1>
+              {isOllamaBrowserAccessError(testMsg || loadError)
+                ? 'Ollama is running, but browser access is blocked. Quit Ollama, then restart it with:'
+                : 'Ollama may not be running. Start it with:'}
+            </Caption1>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
               <span style={{
                 fontFamily: 'monospace',
@@ -767,13 +772,16 @@ function ProviderForm({
                 borderRadius: 3,
                 flex: 1,
               }}>
-                ollama serve
+                {isOllamaBrowserAccessError(testMsg || loadError) ? getOllamaBrowserAccessCommand() : 'ollama serve'}
               </span>
               <Button
                 size="small"
                 appearance="subtle"
                 onClick={() => {
-                  void navigator.clipboard.writeText('ollama serve').then(() => {
+                  const command = isOllamaBrowserAccessError(testMsg || loadError)
+                    ? getOllamaBrowserAccessCommand()
+                    : 'ollama serve';
+                  void navigator.clipboard.writeText(command).then(() => {
                     setCopiedOllamaCmd(true);
                     setTimeout(() => setCopiedOllamaCmd(false), 2000);
                   });
@@ -782,6 +790,11 @@ function ProviderForm({
                 {copiedOllamaCmd ? 'Copied!' : 'Copy'}
               </Button>
             </div>
+            {isOllamaBrowserAccessError(testMsg || loadError) && (
+              <Caption1 style={{ display: 'block', marginTop: 6, color: tokens.colorNeutralForeground3 }}>
+                If it still fails inside Excel, check the Office WebView loopback exemption.
+              </Caption1>
+            )}
           </MessageBarBody>
         </MessageBar>
       )}
