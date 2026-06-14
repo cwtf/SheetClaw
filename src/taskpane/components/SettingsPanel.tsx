@@ -760,7 +760,7 @@ function ProviderForm({
           <MessageBarBody>
             <Caption1>
               {isOllamaBrowserAccessError(testMsg || loadError)
-                ? 'Ollama is running, but browser access is blocked. Quit Ollama, then restart it with:'
+                ? 'Ollama is running, but browser access is blocked. Run this in PowerShell, then fully quit and reopen Ollama:'
                 : 'Ollama may not be running. Start it with:'}
             </Caption1>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
@@ -792,7 +792,7 @@ function ProviderForm({
             </div>
             {isOllamaBrowserAccessError(testMsg || loadError) && (
               <Caption1 style={{ display: 'block', marginTop: 6, color: tokens.colorNeutralForeground3 }}>
-                If it still fails inside Excel, check the Office WebView loopback exemption.
+                If it still fails inside Excel after restarting Ollama, check the Office WebView loopback exemption.
               </Caption1>
             )}
           </MessageBarBody>

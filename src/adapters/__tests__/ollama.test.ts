@@ -48,7 +48,7 @@ describe('Ollama adapter - model listing', () => {
 describe('Ollama browser access helpers', () => {
   it('builds a PowerShell command for allowing the add-in origin', () => {
     expect(getOllamaBrowserAccessCommand('https://cwtf.github.io')).toBe(
-      "$env:OLLAMA_ORIGINS='https://cwtf.github.io'; ollama serve"
+      "[Environment]::SetEnvironmentVariable('OLLAMA_ORIGINS','https://cwtf.github.io','User')"
     );
   });
 

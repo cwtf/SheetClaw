@@ -20,9 +20,13 @@ function browserOrigin(): string | undefined {
   return window.location?.origin;
 }
 
+function psSingleQuoted(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
 export function getOllamaBrowserAccessCommand(origin = browserOrigin()): string {
   const allowedOrigin = origin ?? '<add-in-origin>';
-  return `$env:OLLAMA_ORIGINS='${allowedOrigin}'; ollama serve`;
+  return `[Environment]::SetEnvironmentVariable('OLLAMA_ORIGINS',${psSingleQuoted(allowedOrigin)},'User')`;
 }
 
 export function isOllamaBrowserAccessError(message: string): boolean {
@@ -48,7 +52,7 @@ async function mapOllamaFetchFailure(baseUrl: string, cause: unknown): Promise<E
     const origin = browserOrigin();
     const originText = origin ? ` (${origin})` : '';
     return new Error(
-      `${BROWSER_ACCESS_ERROR_PREFIX} Allow the add-in origin${originText} by quitting Ollama and restarting it with: ${getOllamaBrowserAccessCommand(origin)}`
+      `${BROWSER_ACCESS_ERROR_PREFIX} Allow the add-in origin${originText} by running this in PowerShell, then fully quit and reopen Ollama: ${getOllamaBrowserAccessCommand(origin)}`
     );
   }
   return cause instanceof Error ? cause : new Error(String(cause));
