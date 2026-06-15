@@ -9,13 +9,14 @@ import {
   type SelectTabData,
 } from '@fluentui/react-components';
 import ChatPanel from './components/ChatPanel';
+import HistoryPanel from './components/HistoryPanel';
 import UsageDashboard from './components/UsageDashboard';
 import SettingsPanel from './components/SettingsPanel';
 import type { SettingsTabKey } from './components/SettingsPanel';
 import AboutPanel from './components/AboutPanel';
 import Footer from './components/Footer';
 
-type TabId = 'chat' | 'usage' | 'settings' | 'about';
+type TabId = 'chat' | 'history' | 'usage' | 'settings' | 'about';
 
 export default function App() {
   const [tab, setTab] = useState<TabId>('chat');
@@ -54,6 +55,7 @@ export default function App() {
         size="small"
       >
         <Tab value="chat">Chat</Tab>
+        <Tab value="history">History</Tab>
         <Tab value="usage">Usage</Tab>
         <Tab value="settings">Settings</Tab>
         <Tab value="about">About</Tab>
@@ -63,6 +65,7 @@ export default function App() {
       {/* Active surface */}
       <div style={{ flex: 1, minHeight: 0, height: '100%' }}>
         {tab === 'chat'     && <ChatPanel onOpenSettings={(target) => { setSettingsTab(target); setTab('settings'); }} />}
+        {tab === 'history'  && <HistoryPanel onOpenChat={() => setTab('chat')} />}
         {tab === 'usage'    && <UsageDashboard />}
         {tab === 'settings' && <SettingsPanel initialTab={settingsTab} />}
         {tab === 'about'    && <AboutPanel />}

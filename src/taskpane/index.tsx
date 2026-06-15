@@ -6,6 +6,7 @@ Office.onReady(() => {
   // Hydrate persisted config and auth before first render. Auth decrypts
   // asynchronously; the store re-renders subscribers when it lands.
   useStore.getState().loadConfigFromStorage();
+  useStore.getState().loadChatHistory();
   void useStore.getState().loadAuthFromStorage();
 
   const container = document.getElementById('root');

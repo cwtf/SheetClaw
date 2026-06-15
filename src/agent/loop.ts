@@ -108,10 +108,10 @@ export class AgentLoop {
       await this.loop(session, client, cfg, ctxBuilder, ac.signal);
     } catch (e) {
       if (ac.signal.aborted) {
-        useStore.getState().updateSession({ status: 'stopped' });
+        useStore.getState().updateSessionById(session.id, { status: 'stopped' });
       } else {
         const message = e instanceof Error ? e.message : String(e);
-        useStore.getState().updateSession({ status: 'error', lastError: { code: 'LoopError', message } });
+        useStore.getState().updateSessionById(session.id, { status: 'error', lastError: { code: 'LoopError', message } });
         this.append(session.id, msg<SystemNoticeMessage>(session.id, { role: 'system_notice', level: 'error', text: `Run failed: ${message}` }));
       }
     } finally {
@@ -154,7 +154,7 @@ export class AgentLoop {
       webSearchEnabled: store.webSearchEnabled && searchToggle.available,
     };
 
-    store.updateSession({
+    store.updateSessionById(session.id, {
       scope: session.scope,
       status: session.status,
       iteration: session.iteration,
@@ -175,10 +175,10 @@ export class AgentLoop {
       await this.loop(session, client, cfg, ctxBuilder, ac.signal);
     } catch (e) {
       if (ac.signal.aborted) {
-        useStore.getState().updateSession({ status: 'stopped' });
+        useStore.getState().updateSessionById(session.id, { status: 'stopped' });
       } else {
         const message = e instanceof Error ? e.message : String(e);
-        useStore.getState().updateSession({ status: 'error', lastError: { code: 'LoopError', message } });
+        useStore.getState().updateSessionById(session.id, { status: 'error', lastError: { code: 'LoopError', message } });
         this.append(session.id, msg<SystemNoticeMessage>(session.id, { role: 'system_notice', level: 'error', text: `Run failed: ${message}` }));
       }
     } finally {
@@ -208,7 +208,7 @@ export class AgentLoop {
       maxIterations: current.maxIterations + additionalIterations,
       stopReason: undefined,
     };
-    useStore.getState().updateSession({
+    useStore.getState().updateSessionById(resumed.id, {
       status: resumed.status,
       maxIterations: resumed.maxIterations,
       stopReason: undefined,
@@ -224,10 +224,10 @@ export class AgentLoop {
       await this.loop(resumed, client, cfg, ctxBuilder, ac.signal);
     } catch (e) {
       if (ac.signal.aborted) {
-        useStore.getState().updateSession({ status: 'stopped' });
+        useStore.getState().updateSessionById(resumed.id, { status: 'stopped' });
       } else {
         const message = e instanceof Error ? e.message : String(e);
-        useStore.getState().updateSession({ status: 'error', lastError: { code: 'LoopError', message } });
+        useStore.getState().updateSessionById(resumed.id, { status: 'error', lastError: { code: 'LoopError', message } });
         this.append(resumed.id, msg<SystemNoticeMessage>(resumed.id, { role: 'system_notice', level: 'error', text: `Run failed: ${message}` }));
       }
     } finally {
@@ -282,13 +282,13 @@ export class AgentLoop {
 
     for (let iter = session.iteration; iter < session.maxIterations; iter++) {
       if (signal.aborted) return;
-      useStore.getState().updateSession({ iteration: iter + 1, status: 'building' });
+      useStore.getState().updateSessionById(session.id, { iteration: iter + 1, status: 'building' });
 
       const messages = useStore.getState().messages.filter(
         m => (m as Message & { sessionId: string }).sessionId === session.id
       );
       const req = ctxBuilder.build(session, messages, toolSpecs, cfg);
-      useStore.getState().updateSession({ status: 'calling_llm' });
+      useStore.getState().updateSessionById(session.id, { status: 'calling_llm' });
 
       const sr = await this.stream(session, client, req, signal);
 
@@ -311,8 +311,11 @@ export class AgentLoop {
         toolCallsCount: sr.toolCalls.length,
       });
 
-      const t = useStore.getState().currentSession?.totals ?? { inputTokens: 0, outputTokens: 0, costUsd: 0 };
-      useStore.getState().updateSession({
+      const current = useStore.getState().currentSession;
+      const t = current?.id === session.id
+        ? current.totals
+        : session.totals;
+      useStore.getState().updateSessionById(session.id, {
         totals: { ...t, inputTokens: t.inputTokens + sr.inputTokens, outputTokens: t.outputTokens + sr.outputTokens },
       });
 
@@ -333,7 +336,7 @@ export class AgentLoop {
       } as Partial<Message>);
 
       if (!calls.length || sr.finishReason === 'stop') {
-        useStore.getState().updateSession({ status: 'done', stopReason: undefined });
+        useStore.getState().updateSessionById(session.id, { status: 'done', stopReason: undefined });
         return;
       }
       if (sr.finishReason === 'length') {
@@ -341,16 +344,16 @@ export class AgentLoop {
           role: 'system_notice', level: 'warn',
           text: 'Response cut off at token limit — the model may not have finished.',
         }));
-        useStore.getState().updateSession({ status: 'done', stopReason: undefined });
+        useStore.getState().updateSessionById(session.id, { status: 'done', stopReason: undefined });
         return;
       }
 
       // Execute tool calls — consecutive network reads run concurrently
-      useStore.getState().updateSession({ status: 'executing_tool' });
+      useStore.getState().updateSessionById(session.id, { status: 'executing_tool' });
       await this.executeCalls(calls, session, signal, parallelizable);
     }
 
-    useStore.getState().updateSession({ status: 'done', stopReason: 'max_iterations' });
+    useStore.getState().updateSessionById(session.id, { status: 'done', stopReason: 'max_iterations' });
     this.append(session.id, msg<SystemNoticeMessage>(session.id, {
       role: 'system_notice', level: 'warn',
       text: `Stopped after ${MAX_ITERATIONS} iterations. The task may be incomplete.`,
@@ -375,7 +378,7 @@ export class AgentLoop {
     let outputTokens = 0;
     const accum: Record<number, { id: string; name: string; argsBuf: string }> = {};
 
-    useStore.getState().updateSession({ status: 'parsing' });
+    useStore.getState().updateSessionById(session.id, { status: 'parsing' });
 
     for await (const ev of client.chat(req, signal)) {
       if (signal.aborted) break;
@@ -483,9 +486,9 @@ export class AgentLoop {
         return;
       }
 
-      useStore.getState().updateSession({ status: 'awaiting_choice', pendingChoice });
+      useStore.getState().updateSessionById(session.id, { status: 'awaiting_choice', pendingChoice });
       const decision = await this.waitForChoice(signal);
-      useStore.getState().updateSession({ status: 'executing_tool', pendingChoice: undefined });
+      useStore.getState().updateSessionById(session.id, { status: 'executing_tool', pendingChoice: undefined });
 
       if (decision.kind === 'dismiss') {
         const result = {
@@ -534,7 +537,7 @@ export class AgentLoop {
         const diff = proposed ? computeRangeDiff(snapshotAddress, snap.before.values ?? [], proposed) : [];
         const wb = this.registry.getManifest().workbooks[0];
 
-        useStore.getState().updateSession({
+        useStore.getState().updateSessionById(session.id, {
           status: 'awaiting_confirmation',
           pendingChange: {
             id: ulid(), toolCall: call, snapshotId: snap.id, diff,
@@ -543,7 +546,7 @@ export class AgentLoop {
           },
         });
       } else {
-        useStore.getState().updateSession({ status: 'awaiting_confirmation' });
+        useStore.getState().updateSessionById(session.id, { status: 'awaiting_confirmation' });
       }
     } catch (captureErr) {
       const message = captureErr instanceof Error ? captureErr.message : String(captureErr);
@@ -555,7 +558,7 @@ export class AgentLoop {
     const decision = useStore.getState().appConfig.autoApproveSession
       ? 'apply'
       : await this.waitForConfirmation(signal);
-    useStore.getState().updateSession({ status: 'executing_tool', pendingChange: undefined });
+    useStore.getState().updateSessionById(session.id, { status: 'executing_tool', pendingChange: undefined });
 
     if (decision === 'cancel') {
       const result = { toolCallId: call.id, ok: false as const, error: { code: 'PermissionDenied' as const, message: 'User cancelled the write.' } };
