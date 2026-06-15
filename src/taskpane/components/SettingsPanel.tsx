@@ -173,6 +173,19 @@ export default function SettingsPanel({ initialTab }: { initialTab?: SettingsTab
     if (initialTab) setSelectedTab(initialTab);
   }, [initialTab]);
 
+  useEffect(() => {
+    if (isApiProvider(appConfig.activeProvider)) {
+      setSelectedApiProvider(appConfig.activeProvider);
+    }
+  }, [appConfig.activeProvider]);
+
+  const apiTabIsActive = providerToTab(appConfig.activeProvider) === 'api';
+
+  function selectApiProvider(provider: ApiProvider) {
+    setSelectedApiProvider(provider);
+    if (apiTabIsActive) setActiveProvider(provider);
+  }
+
   function renderProviderForm(providerKey: ProviderKey, key: string = providerKey) {
     return (
       <ProviderForm
@@ -230,13 +243,13 @@ export default function SettingsPanel({ initialTab }: { initialTab?: SettingsTab
         ) : selectedTab === 'api' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <ActiveProviderButton
-              isActive={appConfig.activeProvider === selectedApiProvider}
+              isActive={apiTabIsActive}
               onSetActive={() => setActiveProvider(selectedApiProvider)}
             />
             <Field label="Provider">
               <Select
                 value={selectedApiProvider}
-                onChange={(_, d) => setSelectedApiProvider(d.value as ApiProvider)}
+                onChange={(_, d) => selectApiProvider(d.value as ApiProvider)}
                 size="small"
               >
                 {API_PROVIDERS.map(p => (
