@@ -2,6 +2,7 @@ import type { ToolSpec } from '../../types';
 import type { ToolHandler } from '../executor';
 import { ToolValidationError } from '../executor';
 import { ToolUnsupportedError } from '../unsupported-error';
+import { optionalBooleanArg, optionalStringArg, stringArg } from './args';
 
 function assertPivotApi(ctx: Excel.RequestContext): void {
   if (!('pivotTables' in ctx.workbook)) {
@@ -101,8 +102,94 @@ export const REFRESH_PIVOT: ToolSpec = {
   mutating: true,
 };
 
+export const REMOVE_PIVOT_FIELD: ToolSpec = {
+  name: 'remove_pivot_field',
+  description: 'Remove a field from a pivot table area. Requires user confirmation.',
+  parameters: {
+    type: 'object',
+    properties: {
+      workbook_id: { type: 'string', description: 'Workbook ID' },
+      name: { type: 'string', description: 'Pivot table name' },
+      field: { type: 'string', description: 'Field name to remove' },
+      area: { type: 'string', description: 'Area: row, column, data, or filter' },
+    },
+    required: ['workbook_id', 'name', 'field', 'area'],
+  },
+  mutating: true,
+};
+
+export const SET_PIVOT_STYLE: ToolSpec = {
+  name: 'set_pivot_style',
+  description: 'Set the pivot table style. Requires user confirmation.',
+  parameters: {
+    type: 'object',
+    properties: {
+      workbook_id: { type: 'string', description: 'Workbook ID' },
+      name: { type: 'string', description: 'Pivot table name' },
+      style: { type: 'string', description: 'Pivot style name, e.g. PivotStyleMedium9' },
+    },
+    required: ['workbook_id', 'name', 'style'],
+  },
+  mutating: true,
+};
+
+export const SET_PIVOT_LAYOUT: ToolSpec = {
+  name: 'set_pivot_layout',
+  description: 'Set pivot table layout and grand total options. Requires user confirmation.',
+  parameters: {
+    type: 'object',
+    properties: {
+      workbook_id: { type: 'string', description: 'Workbook ID' },
+      name: { type: 'string', description: 'Pivot table name' },
+      layout_type: { type: 'string', description: 'Compact, Outline, or Tabular' },
+      show_row_grand_totals: { type: 'boolean', description: 'Show row grand totals' },
+      show_column_grand_totals: { type: 'boolean', description: 'Show column grand totals' },
+      show_banded_rows: { type: 'boolean', description: 'Show banded rows' },
+      show_banded_columns: { type: 'boolean', description: 'Show banded columns' },
+    },
+    required: ['workbook_id', 'name'],
+  },
+  mutating: true,
+};
+
+export const REFRESH_ALL_PIVOTS: ToolSpec = {
+  name: 'refresh_all_pivots',
+  description: 'Refresh every pivot table in the workbook. Requires user confirmation.',
+  parameters: {
+    type: 'object',
+    properties: {
+      workbook_id: { type: 'string', description: 'Workbook ID' },
+    },
+    required: ['workbook_id'],
+  },
+  mutating: true,
+};
+
+export const DELETE_PIVOT: ToolSpec = {
+  name: 'delete_pivot',
+  description: 'Delete a pivot table. Requires user confirmation.',
+  parameters: {
+    type: 'object',
+    properties: {
+      workbook_id: { type: 'string', description: 'Workbook ID' },
+      name: { type: 'string', description: 'Pivot table name' },
+    },
+    required: ['workbook_id', 'name'],
+  },
+  mutating: true,
+};
+
 export const PIVOT_SPECS: ToolSpec[] = [
-  LIST_PIVOTS, GET_PIVOT, CREATE_PIVOT, ADD_PIVOT_FIELD, REFRESH_PIVOT,
+  LIST_PIVOTS,
+  GET_PIVOT,
+  CREATE_PIVOT,
+  ADD_PIVOT_FIELD,
+  REFRESH_PIVOT,
+  REMOVE_PIVOT_FIELD,
+  SET_PIVOT_STYLE,
+  SET_PIVOT_LAYOUT,
+  REFRESH_ALL_PIVOTS,
+  DELETE_PIVOT,
 ];
 
 // ── Handlers ───────────────────────────────────────────────────────────────
@@ -199,4 +286,117 @@ export const handleRefreshPivot: ToolHandler = async (args, ctx) => {
   pivot.refresh();
   await ctx.sync();
   return { name: args.name, refreshed: true };
+};
+
+type PivotCollectionLike = {
+  load: (properties: string) => void;
+  items: Array<{ name: string; delete?: () => void }>;
+  remove?: (hierarchy: unknown) => void;
+};
+
+function pivotByName(args: Record<string, unknown>, ctx: Excel.RequestContext): Excel.PivotTable {
+  assertPivotApi(ctx);
+  return ctx.workbook.pivotTables.getItem(stringArg(args, 'name'));
+}
+
+function pivotAreaCollection(pivot: Excel.PivotTable, area: string): PivotCollectionLike {
+  const pivotAny = pivot as unknown as {
+    rowHierarchies: PivotCollectionLike;
+    columnHierarchies: PivotCollectionLike;
+    dataHierarchies: PivotCollectionLike;
+    filterHierarchies: PivotCollectionLike;
+  };
+  switch (area) {
+    case 'row': return pivotAny.rowHierarchies;
+    case 'column': return pivotAny.columnHierarchies;
+    case 'data': return pivotAny.dataHierarchies;
+    case 'filter': return pivotAny.filterHierarchies;
+    default:
+      throw new ToolValidationError(`Invalid area "${area}". Must be: row, column, data, filter`);
+  }
+}
+
+export const handleRemovePivotField: ToolHandler = async (args, ctx) => {
+  const pivot = pivotByName(args, ctx);
+  const field = stringArg(args, 'field');
+  const area = stringArg(args, 'area').toLowerCase();
+  const collection = pivotAreaCollection(pivot, area);
+  collection.load('items/name');
+  await ctx.sync();
+  const item = collection.items.find(h => h.name === field);
+  if (!item) {
+    throw new ToolValidationError(`Field "${field}" is not in the ${area} area.`);
+  }
+  if (collection.remove) {
+    collection.remove(item);
+  } else if (item.delete) {
+    item.delete();
+  } else {
+    throw new ToolUnsupportedError(`Removing fields from the ${area} area is not supported by this Excel host.`);
+  }
+  await ctx.sync();
+  return { name: args.name, field, area, removed: true };
+};
+
+export const handleSetPivotStyle: ToolHandler = async (args, ctx) => {
+  const pivot = pivotByName(args, ctx) as unknown as { style?: string };
+  pivot.style = stringArg(args, 'style');
+  await ctx.sync();
+  return { name: args.name, style: args.style };
+};
+
+export const handleSetPivotLayout: ToolHandler = async (args, ctx) => {
+  const pivot = pivotByName(args, ctx) as unknown as {
+    layout?: { layoutType?: string };
+    rowGrandTotals?: boolean;
+    columnGrandTotals?: boolean;
+    showBandedRows?: boolean;
+    showBandedColumns?: boolean;
+  };
+  const applied: string[] = [];
+  const layoutType = optionalStringArg(args, 'layout_type');
+  const rowGrandTotals = optionalBooleanArg(args, 'show_row_grand_totals');
+  const columnGrandTotals = optionalBooleanArg(args, 'show_column_grand_totals');
+  const bandedRows = optionalBooleanArg(args, 'show_banded_rows');
+  const bandedColumns = optionalBooleanArg(args, 'show_banded_columns');
+
+  if (layoutType !== undefined) {
+    pivot.layout ??= {};
+    pivot.layout.layoutType = layoutType;
+    applied.push('layoutType');
+  }
+  if (rowGrandTotals !== undefined) {
+    pivot.rowGrandTotals = rowGrandTotals;
+    applied.push('rowGrandTotals');
+  }
+  if (columnGrandTotals !== undefined) {
+    pivot.columnGrandTotals = columnGrandTotals;
+    applied.push('columnGrandTotals');
+  }
+  if (bandedRows !== undefined) {
+    pivot.showBandedRows = bandedRows;
+    applied.push('showBandedRows');
+  }
+  if (bandedColumns !== undefined) {
+    pivot.showBandedColumns = bandedColumns;
+    applied.push('showBandedColumns');
+  }
+
+  await ctx.sync();
+  return { name: args.name, applied };
+};
+
+export const handleRefreshAllPivots: ToolHandler = async (_args, ctx) => {
+  assertPivotApi(ctx);
+  ctx.workbook.pivotTables.refreshAll();
+  await ctx.sync();
+  return { refreshedAll: true };
+};
+
+export const handleDeletePivot: ToolHandler = async (args, ctx) => {
+  const name = stringArg(args, 'name');
+  const pivot = pivotByName(args, ctx) as unknown as { delete: () => void };
+  pivot.delete();
+  await ctx.sync();
+  return { name, deleted: true };
 };
