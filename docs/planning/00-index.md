@@ -25,6 +25,7 @@ see [Doc 15](15-appsource-readiness.md) for the readiness checklist. The archite
 | 13 | [Native Provider Search Spec](13-native-search-spec.md) | Two-tier search: native mechanism for capable LLM providers (OpenRouter, Anthropic, Kimi, Qwen, GLM), Doc 11 BYOK stack for the rest; tier-aware toggle gating; OpenClaw sunset plan |
 | 14 | [Agent Speed Optimization Findings](14-agent-speed-optimization.md) | Findings + actionable backlog from a real slow session (`chat log.md`): broken web_search base-URL fallback, unbounded tool-payload resends, missing runtime/CORS guidance; prioritized fixes with file:line anchors |
 | 15 | [AppSource / Partner Center Publish Readiness](15-appsource-readiness.md) | Certification checklist for publishing to Microsoft Partner Center (AppSource), mapped to current code: what's already ready, gaps (Office-on-the-web compat, listing assets, manifest validation, licensing), and per-item acceptance criteria |
+| 14 | [Agent Speed Optimization Findings](14-agent-speed-optimization.md) | Findings + actionable backlog from a real slow session (`chat log.md`): broken web_search base-URL fallback, unbounded tool-payload resends, missing runtime/CORS guidance; prioritized fixes with file:line anchors |
 
 ## Decision log (items marked [DECISION REQUIRED] across the suite)
 
