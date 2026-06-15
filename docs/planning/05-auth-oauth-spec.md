@@ -104,13 +104,13 @@ Transition table:
 - UI: SettingsPanel shows per-provider badge (green/amber/red); a **blocking banner** appears in ChatPanel only when the *active* provider is not `authenticated`, with a CTA to sign in / enter key.
 - AgentLoop pre-flights `getToken(activeProvider)` before each run; an auth failure there short-circuits the run with an actionable error rather than a provider 401.
 
-## 5.7 Security considerations (locally sideloaded personal add-in)
+## 5.7 Security considerations (BYOK browser add-in; AppSource-targeted)
 
-1. **No confidential client** — never embed a client secret; PKCE public-client only. A secret in a sideloaded bundle is readable by anyone with the manifest.
-2. **Secrets at rest [D3]** — localStorage is plaintext and readable by any script on the origin and by anyone with disk access. Options:
-   - *MVP*: localStorage with light symmetric obfuscation (not real security) + explicit user warning. Acceptable only because it's personal-use, single-user.
-   - *Hardened*: store tokens/keys in **Windows Credential Manager / DPAPI via the sidecar**, never in the browser. Recommended if any key is high-value.
-3. **`anthropic-dangerous-direct-browser-access`** exposes the Anthropic key to the page; acceptable for personal use, but document that the key lives in the browser.
+1. **No confidential client** — never embed a client secret; PKCE public-client only. A secret in the published bundle is readable by anyone who downloads it.
+2. **Secrets at rest [D3] — resolved (implemented).** Secrets are sealed with AES-GCM-256 before they touch localStorage, using a non-extractable key in IndexedDB (`src/auth/secureStore.ts`). This defeats plaintext disk/storage scans.
+   - *Residual risk:* same-origin XSS can still call decrypt; the JWK fallback path (no IndexedDB) stores key and ciphertext in the same store, which is weaker. Fully closing this requires an OS credential vault (Windows Credential Manager / DPAPI) via a sidecar — out of scope for a backend-less add-in. Tracked in [Doc 15](15-appsource-readiness.md).
+   - *Posture for AppSource:* BYOK ("your key, your traffic"), encrypted at rest, disclosed in the privacy policy — acceptable for marketplace distribution.
+3. **`anthropic-dangerous-direct-browser-access`** exposes the Anthropic key to the page; inherent to a BYOK browser add-in. Disclose that the key lives in the browser; the encryption-at-rest above is the mitigation.
 4. **Redirect URI pinning** — only accept the exact same-origin redirect; validate `state` to prevent CSRF/code injection.
 5. **Token scope minimization** — request least-privilege scopes.
 6. **Loopback-only network exposure** — if a sidecar runs, bind to `127.0.0.1` only, require a per-session shared token in requests so other local processes can't drive it, and use its own trusted loopback cert.

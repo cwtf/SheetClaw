@@ -40,7 +40,7 @@ cost = (inputTokens        - cacheReadTokens) /1e6 * inputPerMTok
 
 ## 7.4 Pricing table structure
 
-See Doc 3 §3.1.7. **[DECISION REQUIRED D7]**: bundle a static `pricing.json` (simple, may go stale — Risk R4) vs. fetch-and-cache from a remote source (fresher, adds a network dependency and a trust decision). Recommendation for personal use: **bundled static with a visible `updatedAt` and an in-app "edit pricing" affordance**, so the user can correct any model's rate without a code change.
+See Doc 3 §3.1.7. **[DECISION REQUIRED D7]**: bundle a static `pricing.json` (simple, may go stale — Risk R4) vs. fetch-and-cache from a remote source (fresher, adds a network dependency and a trust decision). Recommendation (holds for published/AppSource distribution too): **bundled static with a visible `updatedAt` and an in-app "edit pricing" affordance**, so the user can correct any model's rate without a code change.
 
 ## 7.5 Pre-execution estimation
 

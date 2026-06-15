@@ -1,8 +1,10 @@
 # SheetClaw Planning Suite Index
 
-SheetClaw is a personal-use Excel task pane add-in (Office.js + React) providing an agentic chat interface
-for reading and editing Excel workbooks across multiple LLM backends. Sideloaded locally via
-shared-folder manifest. No AppSource distribution.
+SheetClaw is an Excel task pane add-in (Office.js + React) providing an agentic chat interface
+for reading and editing Excel workbooks across multiple LLM backends. It currently runs via local
+shared-folder sideload, and **targets eventual publication to Microsoft Partner Center (AppSource)** —
+see [Doc 15](15-appsource-readiness.md) for the readiness checklist. The architecture is BYOK
+(bring-your-own-key) and backend-less, which is compatible with AppSource distribution.
 
 ## Documents
 
@@ -22,6 +24,7 @@ shared-folder manifest. No AppSource distribution.
 | 12 | [OpenClaw Bridge Spec](12-openclaw-bridge-spec.md) | **Sunset pending** (superseded by Doc 13): delegate_web_task tool for a locally-running OpenClaw agent; retained as historical record |
 | 13 | [Native Provider Search Spec](13-native-search-spec.md) | Two-tier search: native mechanism for capable LLM providers (OpenRouter, Anthropic, Kimi, Qwen, GLM), Doc 11 BYOK stack for the rest; tier-aware toggle gating; OpenClaw sunset plan |
 | 14 | [Agent Speed Optimization Findings](14-agent-speed-optimization.md) | Findings + actionable backlog from a real slow session (`chat log.md`): broken web_search base-URL fallback, unbounded tool-payload resends, missing runtime/CORS guidance; prioritized fixes with file:line anchors |
+| 15 | [AppSource / Partner Center Publish Readiness](15-appsource-readiness.md) | Certification checklist for publishing to Microsoft Partner Center (AppSource), mapped to current code: what's already ready, gaps (Office-on-the-web compat, listing assets, manifest validation, licensing), and per-item acceptance criteria |
 
 ## Decision log (items marked [DECISION REQUIRED] across the suite)
 
@@ -32,7 +35,7 @@ relevant document; collected here for visibility.
 |----|----------|----------|
 | D1 | 1, 5 | Whether to run a Node.js sidecar at all (OAuth token exchange / CORS proxy) vs pure browser |
 | D2 | 1 | State management library: Zustand vs Redux Toolkit vs React Context+reducer |
-| D3 | 3, 7 | Where to store API keys: localStorage plaintext vs OS credential vault via sidecar |
+| D3 | 3, 7 | Where to store API keys: localStorage plaintext vs OS credential vault via sidecar — **Resolved (implemented): AES-GCM-256 encryption at rest via `src/auth/secureStore.ts`; OS-vault option deferred (needs a sidecar). Residual XSS-can-decrypt risk tracked in Doc 15.** |
 | D4 | 5 | OpenAI consumer OAuth: confirm whether a public PKCE client is actually available; fallback to API key only |
 | D5 | 4 | Pivot table scope: full create/modify vs read + limited create (Office.js maturity) |
 | D6 | 6 | Confirmation granularity: per-tool-call vs batched per-turn write confirmation |
