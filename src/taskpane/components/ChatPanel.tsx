@@ -156,22 +156,28 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
   async function send() {
     if (!input.trim() || isRunning || !providerReady) return;
     const text = input.trim();
-    setInput('');
 
     const provider = appConfig.activeProvider;
     const cfg = providers[provider];
     const authState = authStates[provider];
     const client = createAdapter(cfg, authState);
-    const scope = { workbookId: getTaskpaneWorkbookLayer().registry.getActiveId() ?? 'host' };
 
     try {
+      await getTaskpaneWorkbookLayer().registry.refresh();
+      setInitError(null);
+      setInput('');
+      const scope = { workbookId: getTaskpaneWorkbookLayer().registry.getActiveId() ?? 'host' };
       if (session) {
         await getTaskpaneAgentLoop().followUp(text, scope, client, cfg);
       } else {
         await getTaskpaneAgentLoop().start(text, scope, client, cfg);
       }
-    } catch {
-      // Errors are captured inside the loop and written to store.
+    } catch (e) {
+      const loopRunning = getTaskpaneAgentLoop().isRunning();
+      if (!loopRunning) {
+        setInitError(e instanceof Error ? e.message : String(e));
+      }
+      // LLM/tool errors are captured inside the loop and written to store.
     }
   }
 
@@ -201,8 +207,14 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
     const authState = authStates[provider as keyof typeof authStates] ?? authStates[appConfig.activeProvider];
     const client = createAdapter(cfg, authState);
     try {
+      await getTaskpaneWorkbookLayer().registry.refresh();
+      setInitError(null);
       await getTaskpaneAgentLoop().continueCurrent(client, cfg);
-    } catch {
+    } catch (e) {
+      const loopRunning = getTaskpaneAgentLoop().isRunning();
+      if (!loopRunning) {
+        setInitError(e instanceof Error ? e.message : String(e));
+      }
       // Errors are captured inside loop.continueCurrent and written to store.
     }
   }
