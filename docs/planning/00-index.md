@@ -21,6 +21,7 @@ shared-folder manifest. No AppSource distribution.
 | 11 | [Web Access & Scope Clarification Spec](11-web-access-spec.md) | web_search/fetch_url tools, request_user_choice menu flow, provider config, caps, genericity rules (reattempt of `5a267ba`) |
 | 12 | [OpenClaw Bridge Spec](12-openclaw-bridge-spec.md) | **Sunset pending** (superseded by Doc 13): delegate_web_task tool for a locally-running OpenClaw agent; retained as historical record |
 | 13 | [Native Provider Search Spec](13-native-search-spec.md) | Two-tier search: native mechanism for capable LLM providers (OpenRouter, Anthropic, Kimi, Qwen, GLM), Doc 11 BYOK stack for the rest; tier-aware toggle gating; OpenClaw sunset plan |
+| 14 | [Agent Speed Optimization Findings](14-agent-speed-optimization.md) | Findings + actionable backlog from a real slow session (`chat log.md`): broken web_search base-URL fallback, unbounded tool-payload resends, missing runtime/CORS guidance; prioritized fixes with file:line anchors |
 
 ## Decision log (items marked [DECISION REQUIRED] across the suite)
 
