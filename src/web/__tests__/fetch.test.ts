@@ -85,6 +85,46 @@ describe('fetch_url caps and previews', () => {
     expect((result as { text: string }).text.length).toBeLessThanOrEqual(1000);
     expect((result as { previewRows: unknown[] }).previewRows).toHaveLength(20);
   });
+
+  it('returns a CSV preview when the source body exceeds the network byte cap', async () => {
+    const csv = [
+      'id,name',
+      ...Array.from({ length: 120_000 }, (_, i) => `${i},name-${i}`),
+    ].join('\n');
+    const fetchImpl = vi.fn(async () => textResponse(csv, {
+      status: 200,
+      headers: { 'content-type': 'text/csv' },
+    }));
+
+    const result = await handleFetchUrlWithOptions({
+      url: 'https://public.example/large.csv',
+      format: 'csv',
+    }, { fetchImpl });
+
+    expect(result).toMatchObject({ format: 'csv', truncated: true });
+    expect((result as { bytesFetched: number }).bytesFetched).toBe(1_000_000);
+    expect((result as { headerRow: string[] }).headerRow).toEqual(['id', 'name']);
+    expect((result as { previewRows: unknown[] }).previewRows).toHaveLength(20);
+  });
+
+  it('returns a JSON text preview when truncation happens before the JSON can be parsed', async () => {
+    const body = `{"rows":[${'"x",'.repeat(1_000_000)}`;
+    const fetchImpl = vi.fn(async () => textResponse(body, {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    const result = await handleFetchUrlWithOptions({
+      url: 'https://public.example/large.json',
+      format: 'json',
+      max_chars: 1000,
+    }, { fetchImpl });
+
+    expect(result).toMatchObject({ format: 'json', truncated: true });
+    expect((result as { returnedChars: number }).returnedChars).toBeLessThanOrEqual(1000);
+    expect((result as { dataPreview: string }).dataPreview).toContain('"rows"');
+    expect((result as { hint: string }).hint).toMatch(/byte cap/);
+  });
 });
 
 describe('fetch_url SSRF guards', () => {

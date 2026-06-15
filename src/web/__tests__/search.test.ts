@@ -20,6 +20,13 @@ function jsonResponse(data: unknown, status = 200): Response {
   });
 }
 
+function textResponse(body: string, contentType = 'text/html'): Response {
+  return new Response(body, {
+    status: 200,
+    headers: { 'content-type': contentType },
+  });
+}
+
 const DOMAIN_FIXTURES = [
   {
     title: 'Quarterly filing',
@@ -67,6 +74,19 @@ describe('Tavily adapter', () => {
     });
 
     expect(results).toEqual([]);
+  });
+
+  it('includes response metadata when Tavily returns non-JSON with a 2xx status', async () => {
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      textResponse('<html><title>Service unavailable</title></html>')
+    );
+
+    await expect(tavilyProvider.search('public data', {
+      maxResults: 3,
+      apiKey: 'key',
+      signal: new AbortController().signal,
+      fetchImpl,
+    })).rejects.toThrow(/tavily response was not valid JSON.*content-type: text\/html.*Service unavailable/);
   });
 
   it('keeps raw content disabled and omits the content field by default', async () => {

@@ -21,6 +21,7 @@ export interface FetchResponse {
   statusText: string;
   contentType: string;
   bytesFetched: number;
+  truncatedByBytes: boolean;
   text: string;
 }
 
@@ -60,6 +61,7 @@ export async function fetchTextWithGuards(
     signal?: AbortSignal;
     timeoutMs?: number;
     maxBytes?: number;
+    truncateAtMaxBytes?: boolean;
   } = {}
 ): Promise<FetchResponse> {
   const original = validatePublicHttpUrl(urlValue);
@@ -91,7 +93,7 @@ export async function fetchTextWithGuards(
     const finalUrl = response.url || original.toString();
     validatePublicHttpUrl(finalUrl);
 
-    const bytes = await readResponseBytes(response, maxBytes);
+    const bytes = await readResponseBytes(response, maxBytes, opts.truncateAtMaxBytes ?? false);
     return {
       url: original.toString(),
       finalUrl,
@@ -99,6 +101,7 @@ export async function fetchTextWithGuards(
       statusText: response.statusText,
       contentType: response.headers.get('content-type') ?? '',
       bytesFetched: bytes.byteLength,
+      truncatedByBytes: bytes.truncated,
       text: new TextDecoder().decode(bytes),
     };
   } catch (e) {
@@ -160,28 +163,41 @@ async function probeReachability(url: URL, fetchImpl: typeof fetch): Promise<boo
   }
 }
 
-async function readResponseBytes(response: Response, maxBytes: number): Promise<Uint8Array> {
+type ReadBytesResult = Uint8Array & { truncated: boolean };
+
+async function readResponseBytes(response: Response, maxBytes: number, truncateAtMaxBytes: boolean): Promise<ReadBytesResult> {
   if (!response.body) {
     const buffer = await response.arrayBuffer();
     if (buffer.byteLength > maxBytes) {
+      if (truncateAtMaxBytes) return withTruncatedFlag(new Uint8Array(buffer.slice(0, maxBytes)), true);
       throw new ToolNetworkError(`Response body exceeded ${maxBytes} bytes.`);
     }
-    return new Uint8Array(buffer);
+    return withTruncatedFlag(new Uint8Array(buffer), false);
   }
 
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
+  let truncated = false;
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     if (!value) continue;
-    total += value.byteLength;
-    if (total > maxBytes) {
+    const remaining = maxBytes - total;
+    if (value.byteLength > remaining) {
+      if (truncateAtMaxBytes && remaining > 0) {
+        chunks.push(value.slice(0, remaining));
+        total = maxBytes;
+      }
       reader.cancel().catch(() => {});
+      if (truncateAtMaxBytes) {
+        truncated = true;
+        break;
+      }
       throw new ToolNetworkError(`Response body exceeded ${maxBytes} bytes.`);
     }
+    total += value.byteLength;
     chunks.push(value);
   }
 
@@ -191,7 +207,11 @@ async function readResponseBytes(response: Response, maxBytes: number): Promise<
     out.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return out;
+  return withTruncatedFlag(out, truncated);
+}
+
+function withTruncatedFlag(bytes: Uint8Array, truncated: boolean): ReadBytesResult {
+  return Object.assign(bytes, { truncated });
 }
 
 function isBlockedIp(host: string): boolean {

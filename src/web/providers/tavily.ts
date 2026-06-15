@@ -46,11 +46,15 @@ export const tavilyProvider: SearchProviderAdapter = {
       throw new ToolNetworkError(`tavily request failed with HTTP ${response.status}`);
     }
 
+    const contentType = response.headers.get('content-type') ?? '';
+    const bodyText = await response.text();
     let json: TavilyResponse;
     try {
-      json = await response.json() as TavilyResponse;
+      json = JSON.parse(bodyText) as TavilyResponse;
     } catch {
-      throw new ToolNetworkError('tavily response was not valid JSON');
+      throw new ToolNetworkError(
+        `tavily response was not valid JSON (HTTP ${response.status}, content-type: ${contentType || 'unknown'}, body preview: ${previewBody(bodyText)})`
+      );
     }
 
     return (json.results ?? [])
@@ -74,5 +78,11 @@ function normalizeResult(result: NonNullable<TavilyResponse['results']>[number])
 
 function capContent(raw: string): string {
   if (raw.length <= MAX_RESULT_CONTENT_CHARS) return raw;
-  return `${raw.slice(0, MAX_RESULT_CONTENT_CHARS)}… [truncated: page continues beyond this point]`;
+  return `${raw.slice(0, MAX_RESULT_CONTENT_CHARS)}... [truncated: page continues beyond this point]`;
+}
+
+function previewBody(text: string): string {
+  const compact = text.replace(/\s+/g, ' ').trim();
+  if (!compact) return 'empty';
+  return JSON.stringify(compact.slice(0, 180));
 }

@@ -98,4 +98,18 @@ describe('fetchTextWithGuards failure classification', () => {
     await expect(fetchTextWithGuards('https://public.example/data', { fetchImpl, maxBytes: 10 }))
       .rejects.toThrow(/Response body exceeded 10 bytes/);
   });
+
+  it('can return a byte-truncated response when requested by a bounded preview tool', async () => {
+    const fetchImpl = vi.fn(async () => textResponse('x'.repeat(100)));
+
+    const response = await fetchTextWithGuards('https://public.example/data', {
+      fetchImpl,
+      maxBytes: 10,
+      truncateAtMaxBytes: true,
+    });
+
+    expect(response.text).toBe('x'.repeat(10));
+    expect(response.bytesFetched).toBe(10);
+    expect(response.truncatedByBytes).toBe(true);
+  });
 });

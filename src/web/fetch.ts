@@ -58,6 +58,7 @@ export async function handleFetchUrlWithOptions(
     const direct = await fetchTextWithGuards(url, {
       fetchImpl: options.fetchImpl,
       signal: options.signal,
+      truncateAtMaxBytes: true,
     });
     return formatFetchResult(direct, requestedFormat, mode, maxChars, 'direct');
   } catch (e) {
@@ -65,6 +66,7 @@ export async function handleFetchUrlWithOptions(
     const reader = await fetchTextWithGuards(`${READER_PROVIDER_ENDPOINT}${url}`, {
       fetchImpl: options.fetchImpl,
       signal: options.signal,
+      truncateAtMaxBytes: true,
     });
     return formatFetchResult(reader, requestedFormat, mode, maxChars, 'reader');
   }
@@ -91,7 +93,7 @@ function formatFetchResult(
   };
 
   if (format === 'json') {
-    return { ...base, ...formatJsonPayload(response.text, maxChars) };
+    return { ...base, ...formatJsonPayload(response.text, maxChars, response.truncatedByBytes) };
   }
   if (format === 'csv') {
     return { ...base, ...formatCsvPayload(response.text, mode, maxChars) };
@@ -108,11 +110,20 @@ function formatTextPayload(text: string, maxChars: number) {
   };
 }
 
-function formatJsonPayload(text: string, maxChars: number) {
+function formatJsonPayload(text: string, maxChars: number, truncatedByBytes: boolean) {
   let data: unknown;
   try {
     data = JSON.parse(text);
   } catch {
+    if (truncatedByBytes) {
+      const capped = cleanTruncate(text, maxChars);
+      return {
+        returnedChars: capped.text.length,
+        truncated: true,
+        dataPreview: capped.text,
+        hint: 'JSON response exceeded the network byte cap before it could be parsed; refetch with a narrower API query or a smaller dataset.',
+      };
+    }
     throw new ToolValidationError('Response is not valid JSON.');
   }
   const serialized = JSON.stringify(data, null, 2);
