@@ -1,11 +1,20 @@
 import { ToolNetworkError } from '../../workbook/executor';
-import type { SearchProviderAdapter, SearchResult } from './index';
+import { MAX_RESULT_CONTENT_CHARS, type SearchProviderAdapter, type SearchResult } from './index';
 
-interface WikipediaResponse {
+interface WikipediaSearchResponse {
   query?: {
     search?: Array<{
       title?: unknown;
       snippet?: unknown;
+    }>;
+  };
+}
+
+interface WikipediaExtractsResponse {
+  query?: {
+    pages?: Record<string, {
+      title?: string;
+      extract?: string;
     }>;
   };
 }
@@ -19,17 +28,19 @@ export const wikipediaProvider: SearchProviderAdapter = {
 
   async search(query, opts): Promise<SearchResult[]> {
     const fetchImpl = opts.fetchImpl ?? fetch;
-    const url = new URL(opts.baseUrl ?? this.endpoint);
-    url.searchParams.set('action', 'query');
-    url.searchParams.set('list', 'search');
-    url.searchParams.set('format', 'json');
-    url.searchParams.set('origin', '*');
-    url.searchParams.set('srlimit', String(Math.min(opts.maxResults, 10)));
-    url.searchParams.set('srsearch', query);
+    const baseEndpoint = opts.baseUrl ?? this.endpoint;
+
+    const searchUrl = new URL(baseEndpoint);
+    searchUrl.searchParams.set('action', 'query');
+    searchUrl.searchParams.set('list', 'search');
+    searchUrl.searchParams.set('format', 'json');
+    searchUrl.searchParams.set('origin', '*');
+    searchUrl.searchParams.set('srlimit', String(Math.min(opts.maxResults, 10)));
+    searchUrl.searchParams.set('srsearch', query);
 
     let response: Response;
     try {
-      response = await fetchImpl(url.toString(), {
+      response = await fetchImpl(searchUrl.toString(), {
         method: 'GET',
         signal: opts.signal,
       });
@@ -42,22 +53,81 @@ export const wikipediaProvider: SearchProviderAdapter = {
       throw new ToolNetworkError(`wikipedia request failed with HTTP ${response.status}`);
     }
 
-    let json: WikipediaResponse;
+    let json: WikipediaSearchResponse;
     try {
-      json = await response.json() as WikipediaResponse;
+      json = await response.json() as WikipediaSearchResponse;
     } catch {
       throw new ToolNetworkError('wikipedia response was not valid JSON');
     }
 
-    const articleBase = new URL(opts.baseUrl ?? this.endpoint).origin;
-    return (json.query?.search ?? [])
+    const articleBase = new URL(baseEndpoint).origin;
+    const results = (json.query?.search ?? [])
       .map(item => normalizeResult(item, articleBase))
       .filter((result): result is SearchResult => !!result);
+
+    if (!opts.includeContent || results.length === 0) return results;
+
+    const extractMap = await fetchExtracts(
+      results.map(r => r.title),
+      baseEndpoint,
+      fetchImpl,
+      opts.signal
+    );
+
+    return results.map(r => ({
+      ...r,
+      ...(extractMap.has(r.title) ? { content: extractMap.get(r.title) } : {}),
+    }));
   },
 };
 
+async function fetchExtracts(
+  titles: string[],
+  baseEndpoint: string,
+  fetchImpl: typeof fetch,
+  signal: AbortSignal
+): Promise<Map<string, string>> {
+  const url = new URL(baseEndpoint);
+  url.searchParams.set('action', 'query');
+  url.searchParams.set('prop', 'extracts');
+  url.searchParams.set('format', 'json');
+  url.searchParams.set('origin', '*');
+  url.searchParams.set('explaintext', '1');
+  url.searchParams.set('exintro', '1');
+  url.searchParams.set('titles', titles.join('|'));
+
+  let response: Response;
+  try {
+    response = await fetchImpl(url.toString(), { method: 'GET', signal });
+  } catch {
+    return new Map();
+  }
+
+  if (!response.ok) return new Map();
+
+  let json: WikipediaExtractsResponse;
+  try {
+    json = await response.json() as WikipediaExtractsResponse;
+  } catch {
+    return new Map();
+  }
+
+  const map = new Map<string, string>();
+  for (const page of Object.values(json.query?.pages ?? {})) {
+    if (typeof page.title === 'string' && typeof page.extract === 'string' && page.extract) {
+      map.set(page.title, capContent(page.extract));
+    }
+  }
+  return map;
+}
+
+function capContent(text: string): string {
+  if (text.length <= MAX_RESULT_CONTENT_CHARS) return text;
+  return `${text.slice(0, MAX_RESULT_CONTENT_CHARS)}… [truncated: article continues beyond this point]`;
+}
+
 function normalizeResult(
-  item: NonNullable<NonNullable<WikipediaResponse['query']>['search']>[number],
+  item: NonNullable<NonNullable<WikipediaSearchResponse['query']>['search']>[number],
   articleBase: string
 ): SearchResult | null {
   if (typeof item.title !== 'string' || !item.title) return null;

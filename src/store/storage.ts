@@ -15,10 +15,17 @@ function unpack<T>(env: Envelope): T {
   return rest as T;
 }
 
+function getStorage(): Storage | null {
+  if (typeof localStorage === 'undefined') return null;
+  return localStorage;
+}
+
 export const storage = {
   get<T>(key: string): T | null {
     try {
-      const raw = localStorage.getItem(key);
+      const store = getStorage();
+      if (!store) return null;
+      const raw = store.getItem(key);
       if (!raw) return null;
       const env = JSON.parse(raw) as Envelope;
       if (env._v !== SCHEMA_VERSION) return null;
@@ -31,31 +38,41 @@ export const storage = {
   put<T>(key: string, value: T): void {
     const serialized = JSON.stringify(pack(value));
     try {
-      localStorage.setItem(key, serialized);
+      const store = getStorage();
+      if (!store) return;
+      store.setItem(key, serialized);
     } catch (e) {
-      if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+      if (typeof DOMException !== 'undefined' && e instanceof DOMException && e.name === 'QuotaExceededError') {
         // Evict oldest usage day buckets then retry once
         evictOldestUsageBucket();
         try {
-          localStorage.setItem(key, serialized);
+          const store = getStorage();
+          if (!store) return;
+          store.setItem(key, serialized);
         } catch {
-          window.dispatchEvent(new CustomEvent('xl:quota-warning', { detail: { key } }));
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('xl:quota-warning', { detail: { key } }));
+          }
         }
       }
     }
   },
 
   remove(key: string): void {
-    localStorage.removeItem(key);
+    const store = getStorage();
+    if (!store) return;
+    store.removeItem(key);
   },
 };
 
 function evictOldestUsageBucket(): void {
+  const store = getStorage();
+  if (!store) return;
   const keys: string[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
+  for (let i = 0; i < store.length; i++) {
+    const k = store.key(i);
     if (k?.startsWith('xl.usage.day.')) keys.push(k);
   }
   keys.sort(); // ISO dates sort lexicographically
-  if (keys.length > 0) localStorage.removeItem(keys[0]);
+  if (keys.length > 0) store.removeItem(keys[0]);
 }

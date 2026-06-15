@@ -13,6 +13,50 @@ export interface OllamaAdapterConfig {
 }
 
 const DEFAULT_BASE = 'http://localhost:11434';
+const BROWSER_ACCESS_ERROR_PREFIX = 'Ollama is reachable, but this add-in cannot read it.';
+
+function browserOrigin(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return window.location?.origin;
+}
+
+function psSingleQuoted(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+export function getOllamaBrowserAccessCommand(origin = browserOrigin()): string {
+  const allowedOrigin = origin ?? '<add-in-origin>';
+  return `[Environment]::SetEnvironmentVariable('OLLAMA_ORIGINS',${psSingleQuoted(allowedOrigin)},'User')`;
+}
+
+export function isOllamaBrowserAccessError(message: string): boolean {
+  return message.includes(BROWSER_ACCESS_ERROR_PREFIX);
+}
+
+async function canReachOllamaWithoutCors(baseUrl: string): Promise<boolean> {
+  try {
+    await fetch(baseUrl, {
+      method: 'GET',
+      mode: 'no-cors',
+      cache: 'no-store',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function mapOllamaFetchFailure(baseUrl: string, cause: unknown): Promise<Error> {
+  const reachable = await canReachOllamaWithoutCors(baseUrl);
+  if (reachable) {
+    const origin = browserOrigin();
+    const originText = origin ? ` (${origin})` : '';
+    return new Error(
+      `${BROWSER_ACCESS_ERROR_PREFIX} Allow the add-in origin${originText} by running this in PowerShell, then fully quit and reopen Ollama: ${getOllamaBrowserAccessCommand(origin)}`
+    );
+  }
+  return cause instanceof Error ? cause : new Error(String(cause));
+}
 
 // ── Lenient fallback parser (§6.3) ─────────────────────────────────────────
 // Some Ollama models emit tool calls as plain text/JSON rather than the OpenAI
@@ -63,7 +107,7 @@ export class OllamaAdapter implements LLMClient {
   private inner: OpenAIAdapter;
 
   constructor(cfg: OllamaAdapterConfig = {}) {
-    this.base = cfg.baseUrl ?? DEFAULT_BASE;
+    this.base = (cfg.baseUrl ?? DEFAULT_BASE).replace(/\/+$/, '');
     this.inner = new OpenAIAdapter({ baseUrl: `${this.base}/v1`, apiKey: 'ollama' });
   }
 
@@ -78,7 +122,12 @@ export class OllamaAdapter implements LLMClient {
   }
 
   async listModels(): Promise<ModelInfo[]> {
-    const res = await fetch(`${this.base}/api/tags`);
+    let res: Response;
+    try {
+      res = await fetch(`${this.base}/api/tags`);
+    } catch (e) {
+      throw await mapOllamaFetchFailure(this.base, e);
+    }
     if (!res.ok) throw new Error(`listModels failed: ${res.status}`);
     const data = (await res.json()) as { models: Array<{ name: string; model: string }> };
     return data.models.map(m => ({ id: m.model ?? m.name, name: m.name }));

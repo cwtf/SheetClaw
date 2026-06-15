@@ -15,54 +15,49 @@ The add-in is built for local sideloading in Excel with Office.js, React, TypeSc
 - Usage tracking with bundled pricing data, rolling local history, dashboard summaries, and CSV export support.
 - Host-workbook scoped operation, matching the Office task pane runtime model.
 
-## Project Status
+## Sideloading
 
-SheetClaw is currently in the polish and acceptance phase. Automated tests and build have been passing according to the project progress log, while the final manual Excel acceptance gate is still pending.
+### Method 0: Automated script (recommended for development)
 
-See [docs/planning/PROGRESS.md](docs/planning/PROGRESS.md) for the latest implementation state and gate log.
-
-## Requirements
-
-- Windows with Microsoft Excel desktop.
-- Node.js and npm.
-- Microsoft Edge WebView2 runtime, normally included with current Office installs.
-- A local or remote LLM provider credential, unless using an unauthenticated local Ollama setup.
-
-For local Ollama usage, make sure Ollama is running and reachable from the Office WebView. The default base URL is expected to be `http://localhost:11434`.
-
-## Getting Started
-
-Install dependencies:
-
-```powershell
-npm install
-```
-
-Install trusted local development certificates for Office add-ins:
-
-```powershell
-npm run install-certs
-```
-
-Start the HTTPS Vite development server:
-
-```powershell
-npm run dev
-```
-
-The manifest is configured for:
-
-```text
-https://localhost:3000/taskpane.html
-```
-
-In another terminal, sideload the add-in into Excel:
+With the dev server running, execute:
 
 ```powershell
 npm run sideload
 ```
 
-This runs `office-addin-debugging start manifest.xml desktop --app excel`.
+This runs `office-addin-debugging start manifest.xml desktop --app excel` and handles registration automatically.
+
+### Method 1: Shared Folder Catalog
+
+The standard manual approach for Excel 2019 and later when the automated script is not available.
+
+**Step 1 — Set up a shared folder**
+
+1. Create a folder on your PC, e.g. `C:\MyAddins`.
+2. Right-click the folder → **Properties** → **Sharing** tab → **Share** → set permissions and note the network path (e.g. `\\YourPC\MyAddins`).
+3. Copy `manifest.xml` from this repo into that folder.
+
+**Step 2 — Register the folder as a trusted catalog in Excel**
+
+1. Open Excel → **File** → **Options**.
+2. Go to **Trust Center** → **Trust Center Settings**.
+3. Click **Trusted Add-in Catalogs**.
+4. Paste the network path (e.g. `\\YourPC\MyAddins`) into the **Catalog Url** field.
+5. Click **Add catalog** → check **Show in Menu** → click **OK**.
+6. Restart Excel.
+
+**Step 3 — Load the add-in**
+
+1. In Excel, go to **Insert** → **Get Add-ins** (or **My Add-ins**).
+2. Select the **Shared Folder** tab, then select **SheetClaw** and click **Add**.
+
+### Method 2: Upload manifest directly
+
+If your Excel build exposes an upload option:
+
+1. Go to **Insert** → **Get Add-ins**.
+2. Click **My Add-ins** → **Upload My Add-in**.
+3. Browse to `manifest.xml` in this repo and select it.
 
 ## Using The Add-In
 
