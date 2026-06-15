@@ -78,63 +78,6 @@ Mutating operations require confirmation before they are applied to the workbook
 
 Credentials are stored locally by the add-in, encrypted at rest with AES-GCM via Web Crypto; the encryption key is a non-extractable `CryptoKey` kept in IndexedDB. This protects keys from storage dumps and disk inspection, but a same-origin script compromise could still use the key, so treat this as a personal development tool unless you harden credential storage further (for example an OS credential vault) for broader use.
 
-## Available Scripts
-
-```text
-npm run dev                Start the Vite dev server.
-npm run build              Type-check and build production assets.
-npm run preview            Preview the built app.
-npm run install-certs      Install trusted Office add-in dev certificates.
-npm run uninstall-certs    Remove Office add-in dev certificates.
-npm run validate-manifest  Validate manifest.xml.
-npm run sideload           Start Excel with the sideloaded manifest.
-npm run test               Run the Vitest suite once.
-npm run test:watch         Run Vitest in watch mode.
-```
-
-## Repository Layout
-
-```text
-src/agent/       Agent loop, context builder, and system prompt.
-src/adapters/    LLM provider adapters and harness support.
-src/auth/        OAuth and credential helpers.
-src/pricing/     Pricing data and cost calculation.
-src/store/       Zustand store slices and persistence.
-src/taskpane/    React task pane UI.
-src/types/       Shared TypeScript models.
-src/usage/       Usage aggregation and export helpers.
-src/workbook/    Office.js registry, executor, snapshots, and tools.
-docs/planning/   Architecture, specs, risk register, and progress tracking.
-public/assets/   Add-in icons used by the manifest.
-```
-
-## Development Notes
-
-- The add-in targets the active host workbook. Office.js does not provide stable cross-workbook enumeration for this runtime.
-- The task pane origin is `https://localhost:3000`; changing the dev server port requires updating `manifest.xml`.
-- Pivot operations require Excel API support for pivot tables. Unsupported hosts should surface capability errors instead of silently failing.
-- The project is browser-first. There is no Node sidecar in the current MVP path.
-
-## Testing
-
-Run the automated test suite:
-
-```powershell
-npm run test
-```
-
-Build the project:
-
-```powershell
-npm run build
-```
-
-Validate the Office manifest:
-
-```powershell
-npm run validate-manifest
-```
-
 ## License
 
 SheetClaw is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE.md) —
