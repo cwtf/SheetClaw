@@ -31,17 +31,17 @@ import {
 } from '../../adapters/native-search';
 import { getSearchProvider, SEARCH_PROVIDERS, type SearchProviderId, type WebAccessProvider } from '../../web/providers';
 
-type ApiKeyProvider = Exclude<ProviderKey, 'ollama' | 'generic'>;
-export type SettingsTabKey = 'ollama' | 'apiKeys' | 'generic' | 'search';
+type ApiProvider = Exclude<ProviderKey, 'ollama'>;
+export type SettingsTabKey = 'ollama' | 'api' | 'search';
 
 const SETTINGS_TABS: { key: SettingsTabKey; label: string }[] = [
   { key: 'ollama', label: 'Ollama' },
-  { key: 'generic', label: 'OpenRouter' },
-  { key: 'apiKeys', label: 'Other API' },
+  { key: 'api', label: 'API' },
   { key: 'search', label: 'Search' },
 ];
 
-const API_KEY_PROVIDERS: { key: ApiKeyProvider; label: string }[] = [
+const API_PROVIDERS: { key: ApiProvider; label: string }[] = [
+  { key: 'generic', label: 'OpenRouter / Compatible API' },
   { key: 'openai', label: 'OpenAI' },
   { key: 'anthropic', label: 'Anthropic' },
   { key: 'deepseek', label: 'DeepSeek' },
@@ -141,12 +141,11 @@ function chooseDefaultModel(providerKey: ProviderKey, baseUrl: string, ids: stri
 }
 
 function providerToTab(provider: ProviderKey): SettingsTabKey {
-  if (provider !== 'ollama' && provider !== 'generic') return 'apiKeys';
-  return provider;
+  return provider === 'ollama' ? 'ollama' : 'api';
 }
 
-function isApiKeyProvider(provider: ProviderKey): provider is ApiKeyProvider {
-  return provider !== 'ollama' && provider !== 'generic';
+function isApiProvider(provider: ProviderKey): provider is ApiProvider {
+  return provider !== 'ollama';
 }
 
 export default function SettingsPanel({ initialTab }: { initialTab?: SettingsTabKey }) {
@@ -166,8 +165,8 @@ export default function SettingsPanel({ initialTab }: { initialTab?: SettingsTab
   const setWebSearchEnabled = useStore(s => s.setWebSearchEnabled);
 
   const [selectedTab, setSelectedTab] = useState<SettingsTabKey>(initialTab ?? providerToTab(appConfig.activeProvider));
-  const [selectedApiProvider, setSelectedApiProvider] = useState<ApiKeyProvider>(
-    isApiKeyProvider(appConfig.activeProvider) ? appConfig.activeProvider : 'openai'
+  const [selectedApiProvider, setSelectedApiProvider] = useState<ApiProvider>(
+    isApiProvider(appConfig.activeProvider) ? appConfig.activeProvider : 'generic'
   );
 
   useEffect(() => {
@@ -181,7 +180,7 @@ export default function SettingsPanel({ initialTab }: { initialTab?: SettingsTab
         providerKey={providerKey}
         cfg={providers[providerKey]}
         auth={authStates[providerKey]}
-        showActiveButton={selectedTab !== 'apiKeys'}
+        showActiveButton={selectedTab !== 'api'}
         isActive={appConfig.activeProvider === providerKey}
         onSetActive={() => setActiveProvider(providerKey)}
         onSave={(patch) => setProvider(providerKey, patch)}
@@ -228,7 +227,7 @@ export default function SettingsPanel({ initialTab }: { initialTab?: SettingsTab
               setWebSearchEnabled(false);
             }}
           />
-        ) : selectedTab === 'apiKeys' ? (
+        ) : selectedTab === 'api' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <ActiveProviderButton
               isActive={appConfig.activeProvider === selectedApiProvider}
@@ -237,10 +236,10 @@ export default function SettingsPanel({ initialTab }: { initialTab?: SettingsTab
             <Field label="Provider">
               <Select
                 value={selectedApiProvider}
-                onChange={(_, d) => setSelectedApiProvider(d.value as ApiKeyProvider)}
+                onChange={(_, d) => setSelectedApiProvider(d.value as ApiProvider)}
                 size="small"
               >
-                {API_KEY_PROVIDERS.map(p => (
+                {API_PROVIDERS.map(p => (
                   <option key={p.key} value={p.key}>{p.label}</option>
                 ))}
               </Select>
