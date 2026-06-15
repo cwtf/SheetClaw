@@ -38,6 +38,8 @@ export default function HistoryPanel({ onOpenChat }: { onOpenChat: () => void })
   const currentSessionId = useStore(s => s.currentSession?.id);
   const loadChatHistory = useStore(s => s.loadChatHistory);
   const resumeChat = useStore(s => s.resumeChat);
+  const deleteChat = useStore(s => s.deleteChat);
+  const deleteAllChatHistory = useStore(s => s.deleteAllChatHistory);
   const resetSessionTotals = useStore(s => s.resetSessionTotals);
 
   useEffect(() => {
@@ -58,6 +60,18 @@ export default function HistoryPanel({ onOpenChat }: { onOpenChat: () => void })
     onOpenChat();
   }
 
+  function deleteHistoryItem(item: ChatHistoryItem) {
+    if (!confirm(`Delete "${item.title}" from chat history? This cannot be undone.`)) return;
+    if (item.id === currentSessionId) getTaskpaneAgentLoop().stop();
+    deleteChat(item.id);
+  }
+
+  function deleteAllHistory() {
+    if (!confirm('Delete all chat history? This cannot be undone.')) return;
+    getTaskpaneAgentLoop().stop();
+    deleteAllChatHistory();
+  }
+
   return (
     <div style={{
       display: 'flex',
@@ -69,15 +83,36 @@ export default function HistoryPanel({ onOpenChat }: { onOpenChat: () => void })
       boxSizing: 'border-box',
       overflowX: 'hidden',
     }}>
-      <div style={{ flexShrink: 0 }}>
-        <Body1Strong>History</Body1Strong>
-        <Caption1 style={{
-          display: 'block',
-          marginTop: 2,
-          color: tokens.colorNeutralForeground3,
-        }}>
-          Resume a previous workbook chat.
-        </Caption1>
+      <div style={{
+        flexShrink: 0,
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        gap: 8,
+      }}>
+        <div style={{ minWidth: 0 }}>
+          <Body1Strong>History</Body1Strong>
+          <Caption1 style={{
+            display: 'block',
+            marginTop: 2,
+            color: tokens.colorNeutralForeground3,
+          }}>
+            Resume a previous workbook chat.
+          </Caption1>
+        </div>
+        {history.length > 0 && (
+          <Button
+            appearance="subtle"
+            size="small"
+            onClick={deleteAllHistory}
+            style={{
+              flexShrink: 0,
+              color: tokens.colorPaletteRedForeground1,
+            }}
+          >
+            Delete all
+          </Button>
+        )}
       </div>
 
       {history.length === 0 ? (
@@ -104,82 +139,112 @@ export default function HistoryPanel({ onOpenChat }: { onOpenChat: () => void })
           {history.map(item => {
             const selected = item.id === currentSessionId;
             return (
-              <button
+              <div
                 key={item.id}
-                type="button"
-                onClick={() => openHistoryItem(item.id)}
                 style={{
                   display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'stretch',
-                  gap: 6,
+                  alignItems: 'flex-start',
+                  gap: 4,
                   width: '100%',
                   minWidth: 0,
-                  padding: 10,
-                  textAlign: 'left',
+                  padding: 4,
                   borderRadius: 6,
                   border: `1px solid ${selected ? tokens.colorBrandStroke1 : tokens.colorNeutralStroke1}`,
                   background: selected ? tokens.colorBrandBackground2 : tokens.colorNeutralBackground1,
                   color: tokens.colorNeutralForeground1,
-                  cursor: 'pointer',
+                  boxSizing: 'border-box',
                 }}
-                aria-current={selected ? 'true' : undefined}
               >
-                <span style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 8,
-                  minWidth: 0,
-                }}>
-                  <Body1Strong style={{
+                <button
+                  type="button"
+                  onClick={() => openHistoryItem(item.id)}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'stretch',
+                    gap: 6,
+                    flex: 1,
                     minWidth: 0,
+                    padding: 6,
+                    textAlign: 'left',
+                    border: 0,
+                    background: 'transparent',
+                    color: 'inherit',
+                    cursor: 'pointer',
+                    font: 'inherit',
+                  }}
+                  aria-current={selected ? 'true' : undefined}
+                >
+                  <span style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    minWidth: 0,
+                  }}>
+                    <Body1Strong style={{
+                      minWidth: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {item.title}
+                    </Body1Strong>
+                    <Caption1 style={{
+                      flexShrink: 0,
+                      padding: '1px 6px',
+                      borderRadius: 999,
+                      border: `1px solid ${tokens.colorNeutralStroke1}`,
+                      color: tokens.colorNeutralForeground3,
+                      background: tokens.colorNeutralBackground2,
+                    }}>
+                      {statusLabel(item.status)}
+                    </Caption1>
+                  </span>
+
+                  <Caption1 style={{
+                    color: tokens.colorNeutralForeground2,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                   }}>
-                    {item.title}
-                  </Body1Strong>
-                  <Caption1 style={{
+                    {item.preview}
+                  </Caption1>
+
+                  <span style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    minWidth: 0,
+                  }}>
+                    <Caption1 style={{
+                      color: tokens.colorNeutralForeground3,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {item.model || item.provider}
+                    </Caption1>
+                    <Caption1 style={{ color: tokens.colorNeutralForeground3, flexShrink: 0 }}>
+                      {formatDate(item.updatedAt)} | {item.messageCount}
+                    </Caption1>
+                  </span>
+                </button>
+                <Button
+                  appearance="subtle"
+                  size="small"
+                  aria-label={`Delete ${item.title}`}
+                  title="Delete"
+                  onClick={() => deleteHistoryItem(item)}
+                  style={{
                     flexShrink: 0,
-                    padding: '1px 6px',
-                    borderRadius: 999,
-                    border: `1px solid ${tokens.colorNeutralStroke1}`,
-                    color: tokens.colorNeutralForeground3,
-                    background: tokens.colorNeutralBackground2,
-                  }}>
-                    {statusLabel(item.status)}
-                  </Caption1>
-                </span>
-
-                <Caption1 style={{
-                  color: tokens.colorNeutralForeground2,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}>
-                  {item.preview}
-                </Caption1>
-
-                <span style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 8,
-                  minWidth: 0,
-                }}>
-                  <Caption1 style={{
-                    color: tokens.colorNeutralForeground3,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}>
-                    {item.model || item.provider}
-                  </Caption1>
-                  <Caption1 style={{ color: tokens.colorNeutralForeground3, flexShrink: 0 }}>
-                    {formatDate(item.updatedAt)} | {item.messageCount}
-                  </Caption1>
-                </span>
-              </button>
+                    minWidth: 32,
+                    color: tokens.colorPaletteRedForeground1,
+                  }}
+                >
+                  🗑️
+                </Button>
+              </div>
             );
           })}
         </div>

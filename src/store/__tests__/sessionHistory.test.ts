@@ -102,4 +102,36 @@ describe('session history', () => {
     expect(restored?.pendingChoice).toBeUndefined();
     expect(restored?.lastError?.code).toBe('SessionInterrupted');
   });
+
+  it('deletes an individual chat transcript', () => {
+    useStore.getState().setSession(session('s1'));
+    useStore.getState().appendMessage(userMessage('s1', 'First chat'));
+    useStore.getState().setSession(session('s2'));
+    useStore.getState().appendMessage(userMessage('s2', 'Second chat'));
+
+    useStore.getState().deleteChat('s1');
+
+    expect(useStore.getState().chatHistory.map(item => item.id)).toEqual(['s2']);
+    expect(localStorage.getItem('xl.chat.history.s1')).toBeNull();
+    expect(useStore.getState().resumeChat('s1')).toBe(false);
+    expect(useStore.getState().resumeChat('s2')).toBe(true);
+  });
+
+  it('deletes all chat history and clears the active chat', () => {
+    useStore.getState().setSession(session('s1'));
+    useStore.getState().appendMessage(userMessage('s1', 'First chat'));
+    useStore.getState().setSession(session('s2'));
+    useStore.getState().appendMessage(userMessage('s2', 'Second chat'));
+    localStorage.setItem('xl.chat.history.orphan', 'stale');
+
+    useStore.getState().deleteAllChatHistory();
+
+    expect(useStore.getState().currentSession).toBeNull();
+    expect(useStore.getState().messages).toEqual([]);
+    expect(useStore.getState().chatHistory).toEqual([]);
+    expect(localStorage.getItem('xl.chat.history.index')).toBeNull();
+    expect(localStorage.getItem('xl.chat.history.s1')).toBeNull();
+    expect(localStorage.getItem('xl.chat.history.s2')).toBeNull();
+    expect(localStorage.getItem('xl.chat.history.orphan')).toBeNull();
+  });
 });

@@ -87,6 +87,21 @@ function loadTranscript(sessionId: string): ChatTranscript | null {
   return transcript;
 }
 
+function removeAllHistoryStorage(): void {
+  if (typeof localStorage === 'undefined') {
+    for (const item of loadIndex()) storage.remove(HISTORY_SESSION_KEY(item.id));
+    storage.remove(HISTORY_INDEX_KEY);
+    return;
+  }
+
+  const keys: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key?.startsWith('xl.chat.history.')) keys.push(key);
+  }
+  keys.forEach(key => storage.remove(key));
+}
+
 function sessionForResume(session: AgentSession): AgentSession {
   if (!ACTIVE_STATUSES.has(session.status)) return session;
   return {
@@ -116,6 +131,7 @@ export interface SessionSlice {
   loadChatHistory(): void;
   resumeChat(sessionId: string): boolean;
   deleteChat(sessionId: string): void;
+  deleteAllChatHistory(): void;
 }
 
 export const createSessionSlice: StateCreator<SessionSlice> = set => ({
@@ -248,5 +264,10 @@ export const createSessionSlice: StateCreator<SessionSlice> = set => ({
       chatHistory,
       ...(state.currentSession?.id === sessionId ? { currentSession: null, messages: [] } : {}),
     }));
+  },
+
+  deleteAllChatHistory() {
+    removeAllHistoryStorage();
+    set({ currentSession: null, messages: [], chatHistory: [] });
   },
 });
