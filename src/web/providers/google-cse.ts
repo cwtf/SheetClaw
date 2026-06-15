@@ -1,5 +1,5 @@
 import { ToolNetworkError, ToolValidationError } from '../../workbook/executor';
-import type { SearchProviderAdapter, SearchResult } from './index';
+import { resolveBaseUrl, type SearchProviderAdapter, type SearchResult } from './index';
 
 interface GoogleCseResponse {
   items?: Array<{
@@ -24,7 +24,7 @@ export const googleCseProvider: SearchProviderAdapter = {
     }
 
     const fetchImpl = opts.fetchImpl ?? fetch;
-    const url = new URL(opts.baseUrl ?? this.endpoint);
+    const url = new URL(resolveBaseUrl(opts.baseUrl, this.endpoint));
     url.searchParams.set('cx', engineId);
     url.searchParams.set('q', query);
     url.searchParams.set('num', String(Math.min(opts.maxResults, 10)));
@@ -44,6 +44,13 @@ export const googleCseProvider: SearchProviderAdapter = {
 
     if (!response.ok) {
       throw new ToolNetworkError(`google-cse request failed with HTTP ${response.status}`);
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    if (contentType.includes('text/html')) {
+      throw new ToolNetworkError(
+        'Google CSE: web-access base URL looks misconfigured — response was HTML instead of JSON. Check your search provider settings.'
+      );
     }
 
     let json: GoogleCseResponse;

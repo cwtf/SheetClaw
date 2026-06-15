@@ -1,5 +1,5 @@
 import { ToolNetworkError } from '../../workbook/executor';
-import type { SearchProviderAdapter, SearchResult } from './index';
+import { resolveBaseUrl, type SearchProviderAdapter, type SearchResult } from './index';
 
 interface SearxngResponse {
   results?: Array<{
@@ -19,7 +19,7 @@ export const searxngProvider: SearchProviderAdapter = {
 
   async search(query, opts): Promise<SearchResult[]> {
     const fetchImpl = opts.fetchImpl ?? fetch;
-    const url = new URL(opts.baseUrl ?? this.endpoint);
+    const url = new URL(resolveBaseUrl(opts.baseUrl, this.endpoint));
     url.searchParams.set('q', query);
     url.searchParams.set('format', 'json');
 
@@ -37,6 +37,13 @@ export const searxngProvider: SearchProviderAdapter = {
 
     if (!response.ok) {
       throw new ToolNetworkError(`searxng request failed with HTTP ${response.status}. The instance may have format=json disabled.`);
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    if (contentType.includes('text/html')) {
+      throw new ToolNetworkError(
+        'SearXNG: web-access base URL looks misconfigured — response was HTML instead of JSON. Check your search provider settings.'
+      );
     }
 
     let json: SearxngResponse;

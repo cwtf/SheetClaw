@@ -1,5 +1,5 @@
 import { ToolNetworkError } from '../../workbook/executor';
-import { MAX_RESULT_CONTENT_CHARS, type SearchProviderAdapter, type SearchResult } from './index';
+import { MAX_RESULT_CONTENT_CHARS, resolveBaseUrl, type SearchProviderAdapter, type SearchResult } from './index';
 
 interface WikipediaSearchResponse {
   query?: {
@@ -28,7 +28,7 @@ export const wikipediaProvider: SearchProviderAdapter = {
 
   async search(query, opts): Promise<SearchResult[]> {
     const fetchImpl = opts.fetchImpl ?? fetch;
-    const baseEndpoint = opts.baseUrl ?? this.endpoint;
+    const baseEndpoint = resolveBaseUrl(opts.baseUrl, this.endpoint);
 
     const searchUrl = new URL(baseEndpoint);
     searchUrl.searchParams.set('action', 'query');
@@ -51,6 +51,13 @@ export const wikipediaProvider: SearchProviderAdapter = {
 
     if (!response.ok) {
       throw new ToolNetworkError(`wikipedia request failed with HTTP ${response.status}`);
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    if (contentType.includes('text/html')) {
+      throw new ToolNetworkError(
+        'Wikipedia: web-access base URL looks misconfigured — response was HTML instead of JSON. Check your search provider settings.'
+      );
     }
 
     let json: WikipediaSearchResponse;

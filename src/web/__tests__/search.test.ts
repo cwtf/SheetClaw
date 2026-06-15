@@ -3,7 +3,7 @@ import { filterToolsForRun } from '../../agent/tool-filter';
 import { resolveSearchToggle } from '../../adapters/native-search';
 import type { ToolSpec } from '../../types';
 import { createWebSearchHandler, WEB_SEARCH } from '../search';
-import { MAX_RESULT_CONTENT_CHARS } from '../providers';
+import { MAX_RESULT_CONTENT_CHARS, resolveBaseUrl } from '../providers';
 import { tavilyProvider } from '../providers/tavily';
 import { googleCseProvider } from '../providers/google-cse';
 import { jinaProvider } from '../providers/jina';
@@ -76,7 +76,7 @@ describe('Tavily adapter', () => {
     expect(results).toEqual([]);
   });
 
-  it('includes response metadata when Tavily returns non-JSON with a 2xx status', async () => {
+  it('throws a clear config error when Tavily returns HTML instead of JSON', async () => {
     const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
       textResponse('<html><title>Service unavailable</title></html>')
     );
@@ -86,7 +86,7 @@ describe('Tavily adapter', () => {
       apiKey: 'key',
       signal: new AbortController().signal,
       fetchImpl,
-    })).rejects.toThrow(/tavily response was not valid JSON.*content-type: text\/html.*Service unavailable/);
+    })).rejects.toThrow(/web-access base URL looks misconfigured.*HTML/);
   });
 
   it('keeps raw content disabled and omits the content field by default', async () => {
@@ -354,6 +354,86 @@ describe('Wikipedia adapter', () => {
 
     expect(results[0].content).toBeUndefined();
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('resolveBaseUrl', () => {
+  const FALLBACK = 'https://finance.example';
+
+  it('returns fallback for undefined', () => {
+    expect(resolveBaseUrl(undefined, FALLBACK)).toBe(FALLBACK);
+  });
+
+  it('returns fallback for empty string', () => {
+    expect(resolveBaseUrl('', FALLBACK)).toBe(FALLBACK);
+  });
+
+  it('returns fallback for a relative path', () => {
+    expect(resolveBaseUrl('/api/search', FALLBACK)).toBe(FALLBACK);
+  });
+
+  it('returns fallback for a protocol-relative URL', () => {
+    expect(resolveBaseUrl('//host/path', FALLBACK)).toBe(FALLBACK);
+  });
+
+  it('returns fallback for a non-http scheme', () => {
+    expect(resolveBaseUrl('data:text/html,hi', FALLBACK)).toBe(FALLBACK);
+  });
+
+  it('returns the provided URL when it is a valid http URL', () => {
+    expect(resolveBaseUrl('http://public.example/search', FALLBACK))
+      .toBe('http://public.example/search');
+  });
+
+  it('returns the provided URL when it is a valid https URL', () => {
+    expect(resolveBaseUrl('https://weather.example/api', FALLBACK))
+      .toBe('https://weather.example/api');
+  });
+});
+
+describe('base URL guard — empty/relative baseUrl falls back to provider endpoint', () => {
+  it('Tavily: empty baseUrl sends request to the real Tavily endpoint', async () => {
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse({ results: [] })
+    );
+    await tavilyProvider.search('test', {
+      maxResults: 1, apiKey: 'key', baseUrl: '', signal: new AbortController().signal, fetchImpl,
+    });
+    const [url] = fetchImpl.mock.calls[0];
+    expect(String(url)).toBe('https://api.tavily.com/search');
+  });
+
+  it('SearXNG: relative baseUrl falls back to endpoint; valid custom URL is preserved', async () => {
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse({ results: [] })
+    );
+    // Relative URL → falls back to default endpoint
+    await searxngProvider.search('test', {
+      maxResults: 1, apiKey: '', baseUrl: '/search', signal: new AbortController().signal, fetchImpl,
+    });
+    expect(String(fetchImpl.mock.calls[0][0])).toContain('localhost:8080');
+
+    fetchImpl.mockClear();
+    // Valid absolute custom URL → preserved
+    await searxngProvider.search('test', {
+      maxResults: 1, apiKey: '', baseUrl: 'http://localhost:9090/search',
+      signal: new AbortController().signal, fetchImpl,
+    });
+    expect(String(fetchImpl.mock.calls[0][0])).toContain('localhost:9090');
+  });
+
+  it('providers throw a clear config error when the endpoint returns HTML', async () => {
+    const htmlResp = textResponse('<html><body>login required</body></html>');
+    for (const [provider, opts] of [
+      [tavilyProvider, { apiKey: 'k' }] as const,
+      [searxngProvider, { apiKey: '' }] as const,
+      [jinaProvider, { apiKey: 'k' }] as const,
+    ] as const) {
+      const fetchImpl = vi.fn(async () => htmlResp.clone());
+      await expect(
+        provider.search('q', { maxResults: 1, ...opts, signal: new AbortController().signal, fetchImpl })
+      ).rejects.toThrow(/web-access base URL looks misconfigured.*HTML/);
+    }
   });
 });
 

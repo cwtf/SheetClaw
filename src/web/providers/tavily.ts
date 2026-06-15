@@ -1,5 +1,5 @@
 import { ToolNetworkError } from '../../workbook/executor';
-import { MAX_RESULT_CONTENT_CHARS, type SearchProviderAdapter, type SearchResult } from './index';
+import { MAX_RESULT_CONTENT_CHARS, resolveBaseUrl, type SearchProviderAdapter, type SearchResult } from './index';
 
 interface TavilyResponse {
   results?: Array<{
@@ -22,7 +22,7 @@ export const tavilyProvider: SearchProviderAdapter = {
     const fetchImpl = opts.fetchImpl ?? fetch;
     let response: Response;
     try {
-      response = await fetchImpl(opts.baseUrl ?? this.endpoint, {
+      response = await fetchImpl(resolveBaseUrl(opts.baseUrl, this.endpoint), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -47,6 +47,11 @@ export const tavilyProvider: SearchProviderAdapter = {
     }
 
     const contentType = response.headers.get('content-type') ?? '';
+    if (contentType.includes('text/html')) {
+      throw new ToolNetworkError(
+        'Tavily: web-access base URL looks misconfigured — response was HTML instead of JSON. Check your search provider settings.'
+      );
+    }
     const bodyText = await response.text();
     let json: TavilyResponse;
     try {

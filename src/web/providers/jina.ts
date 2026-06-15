@@ -1,5 +1,5 @@
 import { ToolNetworkError } from '../../workbook/executor';
-import type { SearchProviderAdapter, SearchResult } from './index';
+import { resolveBaseUrl, type SearchProviderAdapter, type SearchResult } from './index';
 
 interface JinaSearchResponse {
   data?: Array<{
@@ -19,7 +19,7 @@ export const jinaProvider: SearchProviderAdapter = {
 
   async search(query, opts): Promise<SearchResult[]> {
     const fetchImpl = opts.fetchImpl ?? fetch;
-    const url = new URL(opts.baseUrl ?? this.endpoint);
+    const url = new URL(resolveBaseUrl(opts.baseUrl, this.endpoint));
     url.searchParams.set('q', query);
 
     let response: Response;
@@ -41,6 +41,13 @@ export const jinaProvider: SearchProviderAdapter = {
 
     if (!response.ok) {
       throw new ToolNetworkError(`jina request failed with HTTP ${response.status}`);
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    if (contentType.includes('text/html')) {
+      throw new ToolNetworkError(
+        'Jina: web-access base URL looks misconfigured — response was HTML instead of JSON. Check your search provider settings.'
+      );
     }
 
     let json: JinaSearchResponse;

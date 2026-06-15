@@ -78,12 +78,8 @@ function compact(
   const available = budget - fixedTokens - maxOutput;
   if (available <= 0) return history.slice(-2); // emergency floor
 
-  const fits = (msgs: NormalizedMessage[]) => estimateTokens(JSON.stringify(msgs)) <= available;
-  if (fits(history)) return history;
-
-  // Steps 1-2: degrade tool result payloads in stages. The two most recent
-  // results are kept largest — they hold the data the model is acting on now;
-  // squashing them forces a refetch and more iterations.
+  // Identify the two most-recent tool results — they hold the data the model
+  // is actively working with; squashing them forces a refetch and more iterations.
   const toolIndices = history.map((m, i) => (m.role === 'tool' ? i : -1)).filter(i => i >= 0);
   const recent = new Set(toolIndices.slice(-2));
   const squash = (msgs: NormalizedMessage[], oldLimit: number, recentLimit: number) =>
@@ -95,8 +91,16 @@ function compact(
         : m;
     });
 
+  // Age-based pass (unconditional): collapse tool results older than the two
+  // most recent ones even when the full transcript fits the context budget.
+  // Prevents token count from growing linearly across long sessions on
+  // large-context models where fits() would otherwise always return true.
   let squashed = squash(history, 2000, Number.MAX_SAFE_INTEGER);
+
+  const fits = (msgs: NormalizedMessage[]) => estimateTokens(JSON.stringify(msgs)) <= available;
   if (fits(squashed)) return squashed;
+
+  // Budget-pressure passes: further degrade when the age-based pass isn't enough.
   squashed = squash(squashed, 200, 2000);
   if (fits(squashed)) return squashed;
 

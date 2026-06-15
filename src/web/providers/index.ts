@@ -67,3 +67,18 @@ export function getSearchProvider(id: WebAccessProvider): SearchProviderAdapter 
   if (id === 'none') return null;
   return SEARCH_PROVIDERS[id] ?? null;
 }
+
+/**
+ * Returns `fallback` unless `baseUrl` is an absolute http(s) URL.
+ * Prevents empty strings or same-origin paths from slipping through `opts.baseUrl ?? this.endpoint`.
+ */
+export function resolveBaseUrl(baseUrl: string | undefined, fallback: string): string {
+  if (!baseUrl) return fallback;
+  try {
+    const u = new URL(baseUrl);
+    if (u.protocol === 'http:' || u.protocol === 'https:') return baseUrl;
+  } catch {
+    // not a valid URL — fall through
+  }
+  return fallback;
+}
