@@ -36,12 +36,12 @@ const breakdownTableStyle: CSSProperties = {
 };
 
 const nameColumnStyle: CSSProperties = {
-  width: '60%',
+  width: '68%',
   minWidth: 0,
 };
 
 const numericColumnStyle: CSSProperties = {
-  width: '20%',
+  width: '32%',
   textAlign: 'right',
   whiteSpace: 'nowrap',
 };
@@ -111,16 +111,8 @@ export default function UsageDashboard() {
       ) : (
         <>
           {/* Totals cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
             <TotalsCard label="Tokens" value={fmtTokens(totals.totalTokens)} />
-            <TotalsCard label="Turns" value={String(totals.turns)} />
-            {totals.estimatedCount > 0 && (
-              <TotalsCard
-                label="Estimated"
-                value={`${totals.estimatedCount} turns`}
-                muted
-              />
-            )}
           </div>
 
           {/* By day (sparkline) */}
@@ -177,7 +169,7 @@ function TotalsCard({ label, value, muted }: { label: string; value: string; mut
   );
 }
 
-function BreakdownTable({ title, rows }: { title: string; rows: Array<{ key: string; totalTokens: number; turns: number }> }) {
+function BreakdownTable({ title, rows }: { title: string; rows: Array<{ key: string; totalTokens: number }> }) {
   return (
     <div>
       <Body1Strong style={{ display: 'block', marginBottom: 4 }}>{title}</Body1Strong>
@@ -186,7 +178,6 @@ function BreakdownTable({ title, rows }: { title: string; rows: Array<{ key: str
           <TableRow>
             <TableHeaderCell style={nameColumnStyle}>Name</TableHeaderCell>
             <TableHeaderCell style={numericColumnStyle}>Tokens</TableHeaderCell>
-            <TableHeaderCell style={numericColumnStyle}>Turns</TableHeaderCell>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -194,7 +185,6 @@ function BreakdownTable({ title, rows }: { title: string; rows: Array<{ key: str
             <TableRow key={r.key}>
               <TableCell style={nameColumnStyle}><Caption1 style={modelNameStyle}>{r.key}</Caption1></TableCell>
               <TableCell style={numericColumnStyle}><Caption1>{fmtTokens(r.totalTokens)}</Caption1></TableCell>
-              <TableCell style={numericColumnStyle}><Caption1>{r.turns}</Caption1></TableCell>
             </TableRow>
           ))}
         </TableBody>
