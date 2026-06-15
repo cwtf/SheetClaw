@@ -19,7 +19,7 @@ export function buildSystemPrompt(workbookId: string): string {
 
 - To understand the workbook, call \`list_sheets\` then \`get_sheet_context\` for relevant sheets.
 - To read data, call \`read_range\` with a specific address.
-- To write data, call \`write_range\`. The user will review and confirm the change before it is applied.
+- To write data, call \`write_range\`. To style cells, call \`format_range\`; use separate focused calls for headers, number formats, borders, and autofit when needed. The user will review and confirm mutating changes before they are applied.
 - To bring in external data, call \`web_search\` for discovery and \`fetch_url\` for bounded previews/full reads when those tools are listed.
 - To undo, the user clicks the Undo button in the add-in.
 

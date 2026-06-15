@@ -18,7 +18,7 @@ import {
   handleGetSelection,
 } from '../tools/range';
 import { handleListWorkbooks, handleGetActiveWorkbook } from '../tools/workbook_tools';
-import { COPY_RANGE_FORMAT, handleCopyRangeFormat } from '../tools/write';
+import { COPY_RANGE_FORMAT, FORMAT_RANGE, handleCopyRangeFormat, handleFormatRange } from '../tools/write';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -283,6 +283,100 @@ describe('copy_range_format handler', () => {
     expect(r.ok).toBe(false);
     expect(r.error?.code).toBe('ValidationError');
     expect(r.error?.message).toMatch(/Dimension mismatch/);
+  });
+});
+
+describe('format_range handler', () => {
+  it('applies direct worksheet formatting to a range', async () => {
+    let autofitColumnsCalled = false;
+    let autofitRowsCalled = false;
+    const borders: Record<string, { style?: unknown; color?: unknown; weight?: unknown }> = {};
+    const range = {
+      address: 'Sheet1!A2:E13',
+      rowCount: 12,
+      columnCount: 5,
+      numberFormat: [] as string[][],
+      format: {
+        font: {} as { bold?: boolean; italic?: boolean; color?: string; size?: number },
+        fill: {} as { color?: string },
+        horizontalAlignment: undefined as unknown,
+        verticalAlignment: undefined as unknown,
+        wrapText: false,
+        columnWidth: 0,
+        rowHeight: 0,
+        borders: {
+          getItem: (index: string) => {
+            borders[index] ??= {};
+            return borders[index];
+          },
+        },
+        autofitColumns: () => { autofitColumnsCalled = true; },
+        autofitRows: () => { autofitRowsCalled = true; },
+      },
+      load: () => {},
+    };
+    const ctx = {
+      workbook: { worksheets: { getItem: () => ({ getRange: () => range }) } },
+      sync: async () => {},
+    };
+
+    const registry = makeRegistry();
+    const executor = new ToolExecutor(registry, makeRunner(ctx));
+    executor.register(FORMAT_RANGE, handleFormatRange);
+
+    const r = await executor.execute(
+      makeCall('format_range', {
+        workbook_id: HOST_ID,
+        sheet: 'Sheet1',
+        address: 'A2:E13',
+        number_format: '#,##0',
+        bold: true,
+        fill_color: '#D9EAF7',
+        horizontal_alignment: 'center',
+        border_style: 'continuous',
+        border_color: '#B7C9D6',
+        border_weight: 'thin',
+        autofit_columns: true,
+        autofit_rows: true,
+      }),
+      SCOPE
+    );
+
+    expect(r.ok).toBe(true);
+    expect(range.numberFormat).toHaveLength(12);
+    expect(range.numberFormat[0]).toEqual(['#,##0', '#,##0', '#,##0', '#,##0', '#,##0']);
+    expect(range.format.font.bold).toBe(true);
+    expect(range.format.fill.color).toBe('#D9EAF7');
+    expect(range.format.horizontalAlignment).toBe('Center');
+    expect(borders.EdgeTop).toMatchObject({ style: 'Continuous', color: '#B7C9D6', weight: 'Thin' });
+    expect(borders.InsideHorizontal).toMatchObject({ style: 'Continuous', color: '#B7C9D6', weight: 'Thin' });
+    expect(autofitColumnsCalled).toBe(true);
+    expect(autofitRowsCalled).toBe(true);
+    expect(r.data).toMatchObject({
+      sheet: 'Sheet1',
+      address: 'Sheet1!A2:E13',
+      formatted: expect.arrayContaining(['numberFormat', 'bold', 'fillColor', 'borders', 'autofitColumns', 'autofitRows']),
+    });
+  });
+
+  it('rejects unsupported formatting enum values', async () => {
+    const registry = makeRegistry();
+    const executor = new ToolExecutor(registry, makeRunner({}));
+    executor.register(FORMAT_RANGE, handleFormatRange);
+
+    const r = await executor.execute(
+      makeCall('format_range', {
+        workbook_id: HOST_ID,
+        sheet: 'Sheet1',
+        address: 'A1',
+        horizontal_alignment: 'sideways',
+      }),
+      SCOPE
+    );
+
+    expect(r.ok).toBe(false);
+    expect(r.error?.code).toBe('ValidationError');
+    expect(r.error?.message).toMatch(/horizontal_alignment/);
   });
 });
 

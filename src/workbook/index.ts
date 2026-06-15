@@ -28,7 +28,7 @@ import {
   handleSetScopeWorkbook,
   handleGetNamedRanges,
 } from './tools/workbook_tools';
-import { handleWriteRange, handleClearRange, handleCopyRangeFormat } from './tools/write';
+import { handleWriteRange, handleClearRange, handleCopyRangeFormat, handleFormatRange } from './tools/write';
 import {
   CHART_SPECS,
   handleListCharts, handleCreateChart, handleModifyChart, handleDeleteChart, handleSetChartData,
@@ -65,6 +65,7 @@ export function createWorkbookLayer(): WorkbookLayer {
     [WRITE_SPECS[0], handleWriteRange],
     [WRITE_SPECS[1], handleClearRange],
     [WRITE_SPECS[2], handleCopyRangeFormat],
+    [WRITE_SPECS[3], handleFormatRange],
     // Phase 7 — charts
     [CHART_SPECS[0], handleListCharts],
     [CHART_SPECS[1], handleCreateChart],
