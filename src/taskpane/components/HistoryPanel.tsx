@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Body1,
   Body1Strong,
@@ -41,6 +41,7 @@ export default function HistoryPanel({ onOpenChat }: { onOpenChat: () => void })
   const deleteChat = useStore(s => s.deleteChat);
   const deleteAllChatHistory = useStore(s => s.deleteAllChatHistory);
   const resetSessionTotals = useStore(s => s.resetSessionTotals);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | 'all' | null>(null);
 
   useEffect(() => {
     loadChatHistory();
@@ -61,15 +62,15 @@ export default function HistoryPanel({ onOpenChat }: { onOpenChat: () => void })
   }
 
   function deleteHistoryItem(item: ChatHistoryItem) {
-    if (!confirm(`Delete "${item.title}" from chat history? This cannot be undone.`)) return;
     if (item.id === currentSessionId) getTaskpaneAgentLoop().stop();
     deleteChat(item.id);
+    setPendingDeleteId(null);
   }
 
   function deleteAllHistory() {
-    if (!confirm('Delete all chat history? This cannot be undone.')) return;
     getTaskpaneAgentLoop().stop();
     deleteAllChatHistory();
+    setPendingDeleteId(null);
   }
 
   return (
@@ -100,11 +101,12 @@ export default function HistoryPanel({ onOpenChat }: { onOpenChat: () => void })
             Resume a previous workbook chat.
           </Caption1>
         </div>
-        {history.length > 0 && (
+        {history.length > 0 && pendingDeleteId !== 'all' && (
           <Button
             appearance="subtle"
             size="small"
-            onClick={deleteAllHistory}
+            type="button"
+            onClick={() => setPendingDeleteId('all')}
             style={{
               flexShrink: 0,
               color: tokens.colorPaletteRedForeground1,
@@ -112,6 +114,30 @@ export default function HistoryPanel({ onOpenChat }: { onOpenChat: () => void })
           >
             Delete all
           </Button>
+        )}
+        {history.length > 0 && pendingDeleteId === 'all' && (
+          <div style={{
+            display: 'flex',
+            gap: 4,
+            flexShrink: 0,
+          }}>
+            <Button
+              appearance="primary"
+              size="small"
+              type="button"
+              onClick={deleteAllHistory}
+            >
+              Delete
+            </Button>
+            <Button
+              appearance="secondary"
+              size="small"
+              type="button"
+              onClick={() => setPendingDeleteId(null)}
+            >
+              Cancel
+            </Button>
+          </div>
         )}
       </div>
 
@@ -138,6 +164,7 @@ export default function HistoryPanel({ onOpenChat }: { onOpenChat: () => void })
         }}>
           {history.map(item => {
             const selected = item.id === currentSessionId;
+            const pendingDelete = pendingDeleteId === item.id;
             return (
               <div
                 key={item.id}
@@ -230,20 +257,49 @@ export default function HistoryPanel({ onOpenChat }: { onOpenChat: () => void })
                     </Caption1>
                   </span>
                 </button>
-                <Button
-                  appearance="subtle"
-                  size="small"
-                  aria-label={`Delete ${item.title}`}
-                  title="Delete"
-                  onClick={() => deleteHistoryItem(item)}
-                  style={{
+                {pendingDelete ? (
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4,
                     flexShrink: 0,
-                    minWidth: 32,
-                    color: tokens.colorPaletteRedForeground1,
-                  }}
-                >
-                  🗑️
-                </Button>
+                  }}>
+                    <Button
+                      appearance="primary"
+                      size="small"
+                      type="button"
+                      onClick={() => deleteHistoryItem(item)}
+                      style={{ minWidth: 56 }}
+                    >
+                      Delete
+                    </Button>
+                    <Button
+                      appearance="secondary"
+                      size="small"
+                      type="button"
+                      onClick={() => setPendingDeleteId(null)}
+                      style={{ minWidth: 56 }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    appearance="subtle"
+                    size="small"
+                    type="button"
+                    aria-label={`Delete ${item.title}`}
+                    title="Delete"
+                    onClick={() => setPendingDeleteId(item.id)}
+                    style={{
+                      flexShrink: 0,
+                      minWidth: 32,
+                      color: tokens.colorPaletteRedForeground1,
+                    }}
+                  >
+                    {'\u{1F5D1}\uFE0F'}
+                  </Button>
+                )}
               </div>
             );
           })}
