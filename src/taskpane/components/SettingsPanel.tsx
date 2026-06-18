@@ -40,31 +40,39 @@ const SETTINGS_TABS: { key: SettingsTabKey; label: string }[] = [
   { key: 'search', label: 'Search' },
 ];
 
-const API_PROVIDERS: { key: ApiProvider; label: string }[] = [
-  { key: 'generic', label: 'OpenRouter / Compatible API' },
-  { key: 'openai', label: 'OpenAI' },
-  { key: 'anthropic', label: 'Anthropic' },
-  { key: 'deepseek', label: 'DeepSeek' },
-  { key: 'groq', label: 'Groq' },
-  { key: 'mistral', label: 'Mistral' },
-  { key: 'together', label: 'Together AI' },
-  { key: 'kimi', label: 'Kimi' },
-  { key: 'glm', label: 'GLM' },
-  { key: 'qwen', label: 'Qwen' },
-  { key: 'llama', label: 'Llama' },
+const API_PROVIDERS: { key: ApiProvider; label: string; freeApi: boolean }[] = [
+  { key: 'gemini',      label: 'Google AI Studio',          freeApi: true  },
+  { key: 'groq',        label: 'Groq',                      freeApi: true  },
+  { key: 'cerebras',    label: 'Cerebras',                  freeApi: true  },
+  { key: 'cloudflare',  label: 'Cloudflare Workers AI',     freeApi: true  },
+  { key: 'huggingface', label: 'Hugging Face',              freeApi: true  },
+  { key: 'generic',     label: 'OpenRouter / Compatible API', freeApi: true },
+  { key: 'openai',      label: 'OpenAI',                    freeApi: false },
+  { key: 'anthropic',   label: 'Anthropic',                 freeApi: false },
+  { key: 'deepseek',    label: 'DeepSeek',                  freeApi: false },
+  { key: 'mistral',     label: 'Mistral',                   freeApi: false },
+  { key: 'together',    label: 'Together AI',               freeApi: false },
+  { key: 'kimi',        label: 'Kimi',                      freeApi: false },
+  { key: 'glm',         label: 'GLM',                       freeApi: false },
+  { key: 'qwen',        label: 'Qwen',                      freeApi: false },
+  { key: 'llama',       label: 'Llama',                     freeApi: false },
 ];
 
 const API_KEY_SIGNUP_LINKS: Partial<Record<ProviderKey, { label: string; url: string }>> = {
-  openai: { label: 'Get an OpenAI key', url: 'https://platform.openai.com/api-keys' },
-  anthropic: { label: 'Get an Anthropic key', url: 'https://console.anthropic.com/settings/keys' },
-  deepseek: { label: 'Get a DeepSeek key', url: 'https://platform.deepseek.com/api_keys' },
-  groq: { label: 'Get a Groq key', url: 'https://console.groq.com/keys' },
-  mistral: { label: 'Get a Mistral key', url: 'https://console.mistral.ai/api-keys' },
-  together: { label: 'Get a Together AI key', url: 'https://api.together.ai/settings/api-keys' },
-  kimi: { label: 'Get a Kimi key', url: 'https://platform.moonshot.ai/console/api-keys' },
-  glm: { label: 'Get a GLM key', url: 'https://z.ai/manage-apikey/apikey-list' },
-  qwen: { label: 'Get a Qwen key', url: 'https://bailian.console.aliyun.com/' },
-  llama: { label: 'Get a Llama key', url: 'https://llama.developer.meta.com/' },
+  openai:      { label: 'Get an OpenAI key',          url: 'https://platform.openai.com/api-keys' },
+  anthropic:   { label: 'Get an Anthropic key',       url: 'https://console.anthropic.com/settings/keys' },
+  deepseek:    { label: 'Get a DeepSeek key',         url: 'https://platform.deepseek.com/api_keys' },
+  groq:        { label: 'Get a Groq key (free)',      url: 'https://console.groq.com/keys' },
+  mistral:     { label: 'Get a Mistral key',          url: 'https://console.mistral.ai/api-keys' },
+  together:    { label: 'Get a Together AI key',      url: 'https://api.together.ai/settings/api-keys' },
+  kimi:        { label: 'Get a Kimi key',             url: 'https://platform.moonshot.ai/console/api-keys' },
+  glm:         { label: 'Get a GLM key',              url: 'https://z.ai/manage-apikey/apikey-list' },
+  qwen:        { label: 'Get a Qwen key',             url: 'https://bailian.console.aliyun.com/' },
+  llama:       { label: 'Get a Llama key',            url: 'https://llama.developer.meta.com/' },
+  gemini:      { label: 'Get a Google AI Studio key (free)', url: 'https://aistudio.google.com/apikey' },
+  cerebras:    { label: 'Get a Cerebras key (free)',  url: 'https://cloud.cerebras.ai/platform/api-keys' },
+  cloudflare:  { label: 'Get a Cloudflare API token (free)', url: 'https://dash.cloudflare.com/profile/api-tokens' },
+  huggingface: { label: 'Get a Hugging Face token (free)', url: 'https://huggingface.co/settings/tokens' },
 };
 
 const STATIC_MODELS: Partial<Record<ProviderKey, string[]>> = {
@@ -80,6 +88,9 @@ const STATIC_MODELS: Partial<Record<ProviderKey, string[]>> = {
     'qwen/qwen3-235b-a22b', 'qwen/qwen3.7-max',
     'meta-llama/llama-3.3-70b-instruct',
     'google/gemini-2.0-flash-001',
+    'meta-llama/llama-3.1-8b-instruct:free',
+    'google/gemma-3-27b-it:free',
+    'mistralai/mistral-7b-instruct:free',
   ],
   deepseek: ['deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek-chat', 'deepseek-reasoner'],
   groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-120b', 'moonshotai/kimi-k2-instruct'],
@@ -94,6 +105,30 @@ const STATIC_MODELS: Partial<Record<ProviderKey, string[]>> = {
   glm: ['glm-4.7', 'glm-4.6', 'glm-4.5', 'glm-4.5-flash'],
   qwen: ['qwen-plus', 'qwen-max', 'qwen-turbo', 'qwen3-coder-plus'],
   llama: ['Llama-3.3-70B-Instruct', 'Llama-4-Maverick-17B-128E-Instruct-FP8', 'Llama-4-Scout-17B-16E-Instruct-FP8'],
+  gemini: [
+    'gemini-2.0-flash',
+    'gemini-2.5-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro',
+  ],
+  cerebras: [
+    'llama-3.3-70b',
+    'llama-3.1-8b',
+    'llama-4-scout-17b-16e-instruct',
+    'qwen-3-32b',
+  ],
+  cloudflare: [
+    '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    '@cf/meta/llama-3.1-8b-instruct',
+    '@cf/mistral/mistral-7b-instruct-v0.2',
+    '@cf/google/gemma-7b-it',
+  ],
+  huggingface: [
+    'meta-llama/Llama-3.3-70B-Instruct',
+    'Qwen/Qwen2.5-72B-Instruct',
+    'microsoft/Phi-4',
+    'mistralai/Mistral-7B-Instruct-v0.3',
+  ],
 };
 
 const OPENAI_CHAT_PREFIXES = ['gpt-', 'o1', 'o3', 'o4', 'chatgpt-'];
@@ -112,16 +147,20 @@ function isOpenRouterBaseUrl(url: string): boolean {
 
 function chooseDefaultModel(providerKey: ProviderKey, baseUrl: string, ids: string[]): string {
   const preferredByProvider: Partial<Record<ProviderKey, string[]>> = {
-    openai: ['gpt-4o', 'gpt-4o-mini'],
-    anthropic: ['claude-sonnet-4-6', 'claude-3-5-sonnet-latest'],
-    deepseek: ['deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek-chat'],
-    groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
-    mistral: ['mistral-large-latest', 'mistral-small-latest'],
-    together: ['meta-llama/Llama-3.3-70B-Instruct-Turbo', 'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8'],
-    kimi: ['kimi-k2.6', 'kimi-k2.5'],
-    glm: ['glm-4.7', 'glm-4.6'],
-    qwen: ['qwen-plus', 'qwen-max'],
-    llama: ['Llama-3.3-70B-Instruct', 'Llama-4-Maverick-17B-128E-Instruct-FP8'],
+    openai:      ['gpt-4o', 'gpt-4o-mini'],
+    anthropic:   ['claude-sonnet-4-6', 'claude-3-5-sonnet-latest'],
+    deepseek:    ['deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek-chat'],
+    groq:        ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
+    mistral:     ['mistral-large-latest', 'mistral-small-latest'],
+    together:    ['meta-llama/Llama-3.3-70B-Instruct-Turbo', 'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8'],
+    kimi:        ['kimi-k2.6', 'kimi-k2.5'],
+    glm:         ['glm-4.7', 'glm-4.6'],
+    qwen:        ['qwen-plus', 'qwen-max'],
+    llama:       ['Llama-3.3-70B-Instruct', 'Llama-4-Maverick-17B-128E-Instruct-FP8'],
+    gemini:      ['gemini-2.0-flash', 'gemini-2.5-flash'],
+    cerebras:    ['llama-3.3-70b', 'llama-4-scout-17b-16e-instruct'],
+    cloudflare:  ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/meta/llama-3.1-8b-instruct'],
+    huggingface: ['meta-llama/Llama-3.3-70B-Instruct', 'Qwen/Qwen2.5-72B-Instruct'],
   };
   const preferred = preferredByProvider[providerKey];
   if (preferred) {
@@ -168,6 +207,7 @@ export default function SettingsPanel({ initialTab }: { initialTab?: SettingsTab
   const [selectedApiProvider, setSelectedApiProvider] = useState<ApiProvider>(
     isApiProvider(appConfig.activeProvider) ? appConfig.activeProvider : 'generic'
   );
+  const [showFreeOnly, setShowFreeOnly] = useState(false);
 
   useEffect(() => {
     if (initialTab) setSelectedTab(initialTab);
@@ -246,17 +286,37 @@ export default function SettingsPanel({ initialTab }: { initialTab?: SettingsTab
               isActive={apiTabIsActive}
               onSetActive={() => setActiveProvider(selectedApiProvider)}
             />
-            <Field label="Provider">
-              <Select
-                value={selectedApiProvider}
-                onChange={(_, d) => selectApiProvider(d.value as ApiProvider)}
-                size="small"
-              >
-                {API_PROVIDERS.map(p => (
-                  <option key={p.key} value={p.key}>{p.label}</option>
-                ))}
-              </Select>
-            </Field>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Field label="Provider" style={{ flex: 1 }}>
+                <Select
+                  value={selectedApiProvider}
+                  onChange={(_, d) => selectApiProvider(d.value as ApiProvider)}
+                  size="small"
+                >
+                  {API_PROVIDERS
+                    .filter(p => !showFreeOnly || p.freeApi)
+                    .map(p => (
+                      <option key={p.key} value={p.key}>{p.label}</option>
+                    ))}
+                </Select>
+              </Field>
+              <div style={{ paddingTop: 20, flexShrink: 0 }}>
+                <Checkbox
+                  label="Free"
+                  checked={showFreeOnly}
+                  onChange={(_, d) => {
+                    setShowFreeOnly(!!d.checked);
+                    if (d.checked) {
+                      const freeProviders = API_PROVIDERS.filter(p => p.freeApi);
+                      if (!freeProviders.some(p => p.key === selectedApiProvider)) {
+                        selectApiProvider(freeProviders[0].key);
+                      }
+                    }
+                  }}
+                  size="medium"
+                />
+              </div>
+            </div>
             {renderProviderForm(selectedApiProvider, `api-${selectedApiProvider}`)}
           </div>
         ) : (
