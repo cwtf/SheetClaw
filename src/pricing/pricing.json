@@ -105,6 +105,34 @@
       "inputPerMTok": 0.50,
       "outputPerMTok": 1.50,
       "currency": "USD"
+    },
+    {
+      "provider": "gemini",
+      "modelMatch": "*",
+      "inputPerMTok": 0.00,
+      "outputPerMTok": 0.00,
+      "currency": "USD"
+    },
+    {
+      "provider": "cerebras",
+      "modelMatch": "*",
+      "inputPerMTok": 0.00,
+      "outputPerMTok": 0.00,
+      "currency": "USD"
+    },
+    {
+      "provider": "cloudflare",
+      "modelMatch": "*",
+      "inputPerMTok": 0.00,
+      "outputPerMTok": 0.00,
+      "currency": "USD"
+    },
+    {
+      "provider": "huggingface",
+      "modelMatch": "*",
+      "inputPerMTok": 0.00,
+      "outputPerMTok": 0.00,
+      "currency": "USD"
     }
   ],
   "defaults": {

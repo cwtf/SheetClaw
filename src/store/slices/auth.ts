@@ -117,6 +117,10 @@ const ALL_PROVIDERS: ProviderKey[] = [
   'glm',
   'qwen',
   'llama',
+  'gemini',
+  'cerebras',
+  'cloudflare',
+  'huggingface',
 ];
 
 const SEARCH_PROVIDERS: SearchProviderId[] = SEARCH_PROVIDER_IDS;

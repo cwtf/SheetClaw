@@ -29,6 +29,10 @@ export function createAdapter(cfg: ProviderConfig, auth: string | AuthState = ''
     case 'glm':
     case 'qwen':
     case 'llama':
+    case 'gemini':
+    case 'cerebras':
+    case 'cloudflare':
+    case 'huggingface':
       return new OpenAIAdapter({ apiKey, baseUrl: cfg.baseUrl, provider: cfg.provider, extraHeaders: cfg.headers });
   }
 }

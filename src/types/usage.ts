@@ -10,7 +10,11 @@ export type ProviderKey =
   | 'kimi'
   | 'glm'
   | 'qwen'
-  | 'llama';
+  | 'llama'
+  | 'gemini'
+  | 'cerebras'
+  | 'cloudflare'
+  | 'huggingface';
 
 export interface UsageRecord {
   id: string;
