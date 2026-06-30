@@ -1,8 +1,8 @@
 # SheetClaw
 
-SheetClaw is a personal-use Excel task pane add-in that brings an agentic chat interface into a workbook. It can inspect workbook context, read and write ranges, create charts and pivot tables, and track estimated LLM usage while routing requests through your chosen model provider.
+SheetClaw is an Excel task pane add-in that brings an agentic chat interface into a workbook. It can inspect workbook context, read and write ranges, create charts and pivot tables, and track estimated LLM usage while routing requests through your chosen model provider.
 
-The add-in is built for local sideloading in Excel with Office.js, React, TypeScript, Vite, Fluent UI, and Zustand.
+Built with Office.js, React, TypeScript, Vite, Fluent UI, and Zustand.
 
 ## Features
 
@@ -15,21 +15,21 @@ The add-in is built for local sideloading in Excel with Office.js, React, TypeSc
 - Usage tracking with bundled pricing data, rolling local history, dashboard summaries, and CSV export support.
 - Host-workbook scoped operation, matching the Office task pane runtime model.
 
-## Sideloading
+## Installation
 
-### Method 0: Automated script (recommended for development)
+### Automated installer (recommended)
 
-With the dev server running, execute:
+Download and run the install script. No admin rights required.
 
 ```powershell
-npm run sideload
+powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
-This runs `office-addin-debugging start manifest.xml desktop --app excel` and handles registration automatically.
+The script downloads the manifest from GitHub Pages, places it in `%LOCALAPPDATA%\SheetClaw\`, and registers it as a trusted catalog in Excel's registry. After it completes, open Excel and enable SheetClaw once via **Insert → Add-ins → My Add-ins → Shared Folder**.
 
-### Method 1: Shared Folder Catalog
+### Manual: Shared Folder Catalog
 
-The standard manual approach for Excel 2019 and later when the automated script is not available.
+Standard fallback for Excel 2019 and later.
 
 **Step 1 — Set up a shared folder**
 
@@ -51,13 +51,23 @@ The standard manual approach for Excel 2019 and later when the automated script 
 1. In Excel, go to **Insert** → **Get Add-ins** (or **My Add-ins**).
 2. Select the **Shared Folder** tab, then select **SheetClaw** and click **Add**.
 
-### Method 2: Upload manifest directly
+### Upload manifest directly
 
 If your Excel build exposes an upload option:
 
 1. Go to **Insert** → **Get Add-ins**.
 2. Click **My Add-ins** → **Upload My Add-in**.
 3. Browse to `manifest.xml` in this repo and select it.
+
+### Developer sideload
+
+For local development with the dev server running:
+
+```powershell
+npm run sideload
+```
+
+This runs `office-addin-debugging start manifest.xml desktop --app excel` and registers the local manifest automatically.
 
 ## Using The Add-In
 
