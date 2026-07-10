@@ -429,7 +429,7 @@ function SearchSettingsForm({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Label size="small">BYOK search provider</Label>
         <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-          Used for providers without native web search.
+          Used for providers without native web search; keyless providers are available whenever selected.
         </Caption1>
         {byokNote && (
           <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>

@@ -156,7 +156,7 @@ export function getByokSectionNote(
   resolution: SearchTierResolution
 ): string | undefined {
   if (resolution.tier !== 'native') return undefined;
-  return `Not used while ${providerLabel} is active; native search takes precedence.`;
+  return `${providerLabel} also supports native search; selected keyless providers remain available, while keyed providers are secondary.`;
 }
 
 export function getProviderNativeSearchCaption(provider: ProviderKey, model: string): string {

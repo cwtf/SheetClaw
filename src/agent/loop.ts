@@ -82,7 +82,8 @@ export class AgentLoop {
     const webProvider = store.appConfig.webAccess.provider;
     const byokReady = webProvider !== 'none' && store.isSearchProviderReady(webProvider);
     const searchToggle = resolveSearchToggle({ provider: cfg.provider, model: cfg.model, byokReady });
-    const manualWebSearchEnabled = store.webSearchEnabled && searchToggle.available;
+    const forceClientWebSearch = shouldForceClientWebSearch(webProvider, byokReady);
+    const manualWebSearchEnabled = !forceClientWebSearch && store.webSearchEnabled && searchToggle.available;
 
     const session: AgentSession = {
       id: ulid(),
@@ -140,7 +141,8 @@ export class AgentLoop {
     const webProvider = store.appConfig.webAccess.provider;
     const byokReady = webProvider !== 'none' && store.isSearchProviderReady(webProvider);
     const searchToggle = resolveSearchToggle({ provider: cfg.provider, model: cfg.model, byokReady });
-    const manualWebSearchEnabled = store.webSearchEnabled && searchToggle.available;
+    const forceClientWebSearch = shouldForceClientWebSearch(webProvider, byokReady);
+    const manualWebSearchEnabled = !forceClientWebSearch && store.webSearchEnabled && searchToggle.available;
     const session: AgentSession = {
       ...current,
       scope,
@@ -270,7 +272,7 @@ export class AgentLoop {
     const webProvider = store.appConfig.webAccess.provider;
     const byokReady = webProvider !== 'none' && store.isSearchProviderReady(webProvider);
     const searchToggle = resolveSearchToggle({ provider: cfg.provider, model: cfg.model, byokReady });
-    const forceClientWebSearch = shouldForceClientWebSearch(webProvider, byokReady, searchToggle.tier);
+    const forceClientWebSearch = shouldForceClientWebSearch(webProvider, byokReady);
     const toolSpecs = [
       ...filterToolsForRun(this.executor.getToolSpecs(), session.webSearchEnabled, searchToggle, { forceClientWebSearch }),
       REQUEST_USER_CHOICE,
@@ -627,8 +629,7 @@ function msg<T extends Message>(sessionId: string, fields: Omit<T, 'id' | 'sessi
 
 function shouldForceClientWebSearch(
   webProvider: WebAccessProvider,
-  providerReady: boolean,
-  tier: 'native' | 'byok'
+  providerReady: boolean
 ): boolean {
-  return tier === 'byok' && providerReady && isKeylessSearchProvider(webProvider);
+  return providerReady && isKeylessSearchProvider(webProvider);
 }

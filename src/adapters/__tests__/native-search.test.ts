@@ -66,7 +66,7 @@ describe('native search copy helpers', () => {
     expect(getSearchSettingsStatusText('OpenRouter', resolution)).toContain('OpenRouter has native web search');
     expect(getSearchSettingsStatusText('OpenRouter', resolution)).toContain('provider key');
     expect(getByokSectionNote('OpenRouter', resolution)).toBe(
-      'Not used while OpenRouter is active; native search takes precedence.'
+      'OpenRouter also supports native search; selected keyless providers remain available, while keyed providers are secondary.'
     );
     expect(getProviderNativeSearchCaption('generic', 'openai/gpt-4o-mini')).toBe('Native web search: yes');
   });

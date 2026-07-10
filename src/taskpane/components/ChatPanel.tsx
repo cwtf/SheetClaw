@@ -139,8 +139,7 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
     byokReady: byokSearchReady,
   });
   const selectedSearchProvider = getSearchProvider(appConfig.webAccess.provider);
-  const keylessSearchActive = searchToggle.tier === 'byok'
-    && appConfig.webAccess.provider !== 'none'
+  const keylessSearchActive = appConfig.webAccess.provider !== 'none'
     && byokSearchReady
     && isKeylessSearchProvider(appConfig.webAccess.provider);
   const modelReady = !!activeProvider?.model.trim();

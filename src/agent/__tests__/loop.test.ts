@@ -250,7 +250,7 @@ describe('AgentLoop - web search gating', () => {
   };
   const webTools = [readRange, WEB_SEARCH, fetchUrl];
 
-  it('keeps Doc 11 behavior for BYOK-tier providers with a configured search provider', async () => {
+  it('keeps Doc 11 behavior for BYOK-tier providers with a configured keyed search provider', async () => {
     const requests: LLMRequest[] = [];
     const loop = new AgentLoop(
       makeRegistry(),
@@ -259,7 +259,8 @@ describe('AgentLoop - web search gating', () => {
       noop
     );
 
-    useStore.getState().setAppConfig({ webAccess: { provider: 'wikipedia', readerFallback: false } });
+    useStore.getState().setAppConfig({ webAccess: { provider: 'tavily', readerFallback: false } });
+    useStore.getState().saveSearchApiKey('tavily', 'test-key');
     useStore.getState().setWebSearchEnabled(true);
 
     await loop.start('Search with BYOK tier', SCOPE, makeCapturingClient(requests), CFG);
@@ -273,7 +274,7 @@ describe('AgentLoop - web search gating', () => {
     expect(useStore.getState().currentSession?.webSearchEnabled).toBe(true);
   });
 
-  it('suppresses client web_search on the native tier even when a BYOK provider is configured', async () => {
+  it('suppresses client web_search on the native tier when a keyed BYOK provider is configured', async () => {
     const requests: LLMRequest[] = [];
     const loop = new AgentLoop(
       makeRegistry(),
@@ -282,7 +283,8 @@ describe('AgentLoop - web search gating', () => {
       noop
     );
 
-    useStore.getState().setAppConfig({ webAccess: { provider: 'wikipedia', readerFallback: false } });
+    useStore.getState().setAppConfig({ webAccess: { provider: 'tavily', readerFallback: false } });
+    useStore.getState().saveSearchApiKey('tavily', 'test-key');
     useStore.getState().setWebSearchEnabled(true);
 
     await loop.start('Search with native tier', SCOPE, makeCapturingClient(requests), GENERIC_CFG);
@@ -292,6 +294,7 @@ describe('AgentLoop - web search gating', () => {
       'fetch_url',
       'request_user_choice',
     ]);
+    expect(requests[0].nativeSearch?.provider).toBe('generic');
     expect(useStore.getState().currentSession?.webSearchEnabled).toBe(true);
   });
 
@@ -325,6 +328,24 @@ describe('AgentLoop - web search gating', () => {
     ).start('BYOK off', SCOPE, makeCapturingClient(byokRequests), CFG);
 
     expect(byokRequests[0].tools.map(t => t.name)).toEqual(['read_range', 'web_search', 'fetch_url', 'request_user_choice']);
+    expect(byokRequests[0].nativeSearch).toBeUndefined();
+    expect(useStore.getState().currentSession?.webSearchEnabled).toBe(false);
+  });
+
+  it('exposes keyless client web tools on native-tier models even when the toggle is off', async () => {
+    const requests: LLMRequest[] = [];
+
+    useStore.getState().setAppConfig({ webAccess: { provider: 'wikipedia', readerFallback: false } });
+
+    await new AgentLoop(
+      makeRegistry(),
+      makeExecutor(webTools) as unknown as ToolExecutor,
+      new SnapshotManager(),
+      noop
+    ).start('Native with keyless wiki off', SCOPE, makeCapturingClient(requests), GENERIC_CFG);
+
+    expect(requests[0].tools.map(t => t.name)).toEqual(['read_range', 'web_search', 'fetch_url', 'request_user_choice']);
+    expect(requests[0].nativeSearch).toBeUndefined();
     expect(useStore.getState().currentSession?.webSearchEnabled).toBe(false);
   });
 

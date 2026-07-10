@@ -835,6 +835,12 @@ describe('web tool exposure gating', () => {
     expect(filterToolsForRun(tools, true, search).map(t => t.name)).toEqual(['read_range', 'fetch_url']);
   });
 
+  it('forced client search exposes web_search even on the native tier', () => {
+    const search = resolveSearchToggle({ provider: 'generic', model: 'openai/gpt-4o-mini', byokReady: true });
+    expect(filterToolsForRun(tools, false, search, { forceClientWebSearch: true }).map(t => t.name))
+      .toEqual(['read_range', 'web_search', 'fetch_url']);
+  });
+
   it('Qwen unsupported models fall back to BYOK gating', () => {
     const unavailable = resolveSearchToggle({ provider: 'qwen', model: 'qwen-plus', byokReady: false });
     const configured = resolveSearchToggle({ provider: 'qwen', model: 'qwen-plus', byokReady: true });
