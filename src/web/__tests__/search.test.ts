@@ -482,8 +482,28 @@ describe('CKAN adapter', () => {
 
     expect(results[0].url).toBe('https://public.example/air.csv');
     expect(results[0].snippet).toContain('Environment Agency');
-    expect(results[0].content).toContain('Package URL: https://catalog.data.gov/dataset/air-quality');
+    expect(results[0].content).toContain('Package URL: https://data.gov.au/data/dataset/air-quality');
     expect(String(fetchImpl.mock.calls[0][0])).toContain('package_search');
+  });
+
+  it('derives dataset page URLs from a custom CKAN base URL', async () => {
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => jsonResponse({
+      success: true,
+      result: {
+        results: [{ id: 'pkg1', name: 'air-quality', title: 'Air Quality Measurements' }],
+      },
+    }));
+
+    const results = await ckanProvider.search('air quality', {
+      maxResults: 1,
+      apiKey: '',
+      baseUrl: 'https://public.example/api/3/action/package_search',
+      signal: new AbortController().signal,
+      fetchImpl,
+    });
+
+    expect(results[0].url).toBe('https://public.example/dataset/air-quality');
+    expect(String(fetchImpl.mock.calls[0][0])).toContain('https://public.example/api/3/action/package_search');
   });
 });
 
@@ -550,6 +570,40 @@ describe('IMF DataMapper adapter', () => {
     expect(results[0].url).toBe('https://www.imf.org/external/datamapper/api/v1/NGDP_RPCH');
     expect(results[0].content).toContain('Unit: Percent');
   });
+
+  it('falls back to the reader proxy when the direct fetch is CORS-blocked', async () => {
+    const indicators = { NGDP_RPCH: { label: 'Real GDP growth', description: 'Annual percent change', unit: 'Percent' } };
+    const fetchImpl = vi.fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(jsonResponse({
+        code: 200,
+        status: 20000,
+        data: { title: '', url: 'https://www.imf.org/external/datamapper/api/v1/indicators', content: JSON.stringify({ indicators }) },
+      }));
+
+    const results = await imfProvider.search('real gdp growth', {
+      maxResults: 1,
+      apiKey: '',
+      signal: new AbortController().signal,
+      fetchImpl,
+    });
+
+    expect(String(fetchImpl.mock.calls[1][0])).toBe('https://r.jina.ai/https://www.imf.org/external/datamapper/api/v1/indicators');
+    expect(results[0].title).toBe('Real GDP growth (NGDP_RPCH)');
+  });
+
+  it('reports both failures when the direct fetch and the reader proxy fail', async () => {
+    const fetchImpl = vi.fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockRejectedValueOnce(new TypeError('proxy unreachable'));
+
+    await expect(imfProvider.search('gdp', {
+      maxResults: 1,
+      apiKey: '',
+      signal: new AbortController().signal,
+      fetchImpl,
+    })).rejects.toThrow(/failed directly \(Failed to fetch\) and via the reader proxy \(proxy unreachable\)/);
+  });
 });
 
 describe('Eurostat adapter', () => {
@@ -575,13 +629,20 @@ describe('Eurostat adapter', () => {
 });
 
 describe('ECB adapter', () => {
-  it('ranks dataflows and returns ECB data API URLs', async () => {
-    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => jsonResponse({
-      dataflows: [
-        { id: 'EXR', name: 'Exchange rates', description: 'Euro foreign exchange reference rates' },
-        { id: 'ICP', name: 'Inflation', description: 'Consumer prices' },
-      ],
-    }));
+  // The ECB dataflow listing only serves SDMX-ML XML; application/json gets HTTP 406.
+  // Namespace declarations omitted: the genericity guard rejects the sdmx.org xmlns URLs
+  // and the parser matches on prefixed element names, not bound namespaces.
+  const sdmxXml = `<?xml version='1.0' encoding='UTF-8'?>` +
+    `<mes:Structure>` +
+    `<mes:Structures><str:Dataflows>` +
+    `<str:Dataflow agencyID="ECB" id="EXR" version="1.0"><com:Name xml:lang="en">Exchange rates &amp; more</com:Name></str:Dataflow>` +
+    `<str:Dataflow agencyID="ECB" id="ICP" version="1.0"><com:Name xml:lang="en">Inflation</com:Name></str:Dataflow>` +
+    `</str:Dataflows></mes:Structures></mes:Structure>`;
+
+  it('parses the SDMX XML dataflow listing and returns ECB data API URLs', async () => {
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      textResponse(sdmxXml, 'application/vnd.sdmx.structure+xml;version=2.1')
+    );
 
     const results = await ecbProvider.search('exchange rates', {
       maxResults: 1,
@@ -591,8 +652,24 @@ describe('ECB adapter', () => {
       fetchImpl,
     });
 
+    const [, init] = fetchImpl.mock.calls[0];
+    expect(new Headers((init as RequestInit).headers).get('accept')).toContain('vnd.sdmx.structure+xml');
+    expect(results[0].title).toBe('Exchange rates & more (EXR)');
     expect(results[0].url).toBe('https://data-api.ecb.europa.eu/service/data/EXR?format=jsondata');
-    expect(results[0].content).toContain('Dataflow: Exchange rates');
+    expect(results[0].content).toContain('Dataflow: Exchange rates & more');
+  });
+
+  it('throws a clear error when the response contains no dataflows', async () => {
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      textResponse('<mes:Structure></mes:Structure>', 'application/xml')
+    );
+
+    await expect(ecbProvider.search('exchange rates', {
+      maxResults: 1,
+      apiKey: '',
+      signal: new AbortController().signal,
+      fetchImpl,
+    })).rejects.toThrow(/did not contain any SDMX dataflows/);
   });
 });
 

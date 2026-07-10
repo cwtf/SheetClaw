@@ -12,7 +12,8 @@
     "validate-manifest": "office-addin-manifest validate manifest.xml",
     "sideload": "office-addin-debugging start manifest.xml desktop --app excel",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:providers": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@fluentui/react-components": "^9.74.1",
