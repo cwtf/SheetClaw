@@ -19,7 +19,10 @@ export default function AboutPanel() {
       padding: '24px 16px',
       display: 'flex',
       flexDirection: 'column',
+      boxSizing: 'border-box',
       gap: 16,
+      height: '100%',
+      overflowY: 'auto',
     }}>
       <Title3>
         <span aria-hidden="true" style={{ marginRight: 8 }}>🦞</span>
@@ -105,6 +108,16 @@ export default function AboutPanel() {
         <GitHubIcon />
         <Caption1>github.com/cwtf/SheetClaw</Caption1>
       </a>
+
+      <Caption1
+        style={{
+          color: tokens.colorNeutralForeground3,
+          marginTop: 'auto',
+          paddingTop: 8,
+        }}
+      >
+        Version {__APP_VERSION__}
+      </Caption1>
     </div>
   );
 }
