@@ -66,7 +66,7 @@ describe('native search copy helpers', () => {
     expect(getSearchSettingsStatusText('OpenRouter', resolution)).toContain('OpenRouter has native web search');
     expect(getSearchSettingsStatusText('OpenRouter', resolution)).toContain('provider key');
     expect(getByokSectionNote('OpenRouter', resolution)).toBe(
-      'OpenRouter also supports native search; selected keyless providers remain available, while keyed providers are secondary.'
+      'OpenRouter also supports native search; keyless catalogue search is always available, and a keyed provider is secondary.'
     );
     expect(getProviderNativeSearchCaption('generic', 'openai/gpt-4o-mini')).toBe('Native web search: yes');
   });
@@ -80,7 +80,7 @@ describe('native search copy helpers', () => {
       'Native web search: no - uses the configured Search tab provider'
     );
     expect(getUnavailableSearchToggleHint('Ollama', resolution)).toBe(
-      'Ollama has no native web search. Configure a Search tab provider to enable search.'
+      'Ollama has no native web search. Configure a Search tab provider to enable general internet search. Keyless catalogue search remains available either way.'
     );
   });
 

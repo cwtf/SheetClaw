@@ -238,14 +238,15 @@ export const createConfigSlice: StateCreator<ConfigSlice> = (set, get) => ({
       ? { ...DEFAULT_PROVIDERS, ...storedProviders }
       : get().providers;
 
-    // Migration: individual keyless search providers were folded into the
-    // single keyless bundle; the per-provider base URL no longer applies.
-    // Self-hosted providers (SearXNG) stay individually selectable.
+    // Migration: keyless search is baked into every run and is no longer a
+    // selectable provider. Stored selections of an individual keyless source
+    // or the legacy keyless bundle collapse to 'none' (= keyless only); the
+    // provider field now selects a keyed provider exclusively.
     const webProvider = appConfig.webAccess.provider;
-    if ((keylessSourceIds() as string[]).includes(webProvider)) {
+    if (webProvider === KEYLESS_BUNDLE_ID || (keylessSourceIds() as string[]).includes(webProvider)) {
       appConfig = {
         ...appConfig,
-        webAccess: { ...appConfig.webAccess, provider: KEYLESS_BUNDLE_ID, baseUrl: undefined },
+        webAccess: { ...appConfig.webAccess, provider: 'none', baseUrl: undefined },
       };
       storage.put(APP_KEY, appConfig);
     }

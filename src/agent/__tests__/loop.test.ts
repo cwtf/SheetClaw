@@ -234,7 +234,7 @@ describe('AgentLoop — text-only run', () => {
   });
 });
 
-describe('AgentLoop - web search gating', () => {
+describe('AgentLoop - web search wiring', () => {
   const readRange: ToolSpec = {
     name: 'read_range',
     description: 'Read cells',
@@ -249,118 +249,89 @@ describe('AgentLoop - web search gating', () => {
     runtime: 'none',
   };
   const webTools = [readRange, WEB_SEARCH, fetchUrl];
+  const ALL_TOOLS = ['read_range', 'web_search', 'fetch_url', 'request_user_choice'];
 
-  it('keeps Doc 11 behavior for BYOK-tier providers with a configured keyed search provider', async () => {
+  it('always advertises web tools even with no search configured and the toggle off', async () => {
     const requests: LLMRequest[] = [];
-    const loop = new AgentLoop(
-      makeRegistry(),
-      makeExecutor(webTools) as unknown as ToolExecutor,
-      new SnapshotManager(),
-      noop
-    );
-
-    useStore.getState().setAppConfig({ webAccess: { provider: 'tavily', readerFallback: false } });
-    useStore.getState().saveSearchApiKey('tavily', 'test-key');
-    useStore.getState().setWebSearchEnabled(true);
-
-    await loop.start('Search with BYOK tier', SCOPE, makeCapturingClient(requests), CFG);
-
-    expect(requests[0].tools.map(t => t.name)).toEqual([
-      'read_range',
-      'web_search',
-      'fetch_url',
-      'request_user_choice',
-    ]);
-    expect(useStore.getState().currentSession?.webSearchEnabled).toBe(true);
-  });
-
-  it('suppresses client web_search on the native tier when a keyed BYOK provider is configured', async () => {
-    const requests: LLMRequest[] = [];
-    const loop = new AgentLoop(
-      makeRegistry(),
-      makeExecutor(webTools) as unknown as ToolExecutor,
-      new SnapshotManager(),
-      noop
-    );
-
-    useStore.getState().setAppConfig({ webAccess: { provider: 'tavily', readerFallback: false } });
-    useStore.getState().saveSearchApiKey('tavily', 'test-key');
-    useStore.getState().setWebSearchEnabled(true);
-
-    await loop.start('Search with native tier', SCOPE, makeCapturingClient(requests), GENERIC_CFG);
-
-    expect(requests[0].tools.map(t => t.name)).toEqual([
-      'read_range',
-      'fetch_url',
-      'request_user_choice',
-    ]);
-    expect(requests[0].nativeSearch?.provider).toBe('generic');
-    expect(useStore.getState().currentSession?.webSearchEnabled).toBe(true);
-  });
-
-  it('removes web tools when BYOK-tier search is unavailable even if the session toggle was on', async () => {
-    const requests: LLMRequest[] = [];
-    const loop = new AgentLoop(
-      makeRegistry(),
-      makeExecutor(webTools) as unknown as ToolExecutor,
-      new SnapshotManager(),
-      noop
-    );
-
-    useStore.getState().setWebSearchEnabled(true);
-
-    await loop.start('Search unavailable', SCOPE, makeCapturingClient(requests), CFG);
-
-    expect(requests[0].tools.map(t => t.name)).toEqual(['read_range', 'request_user_choice']);
-    expect(useStore.getState().currentSession?.webSearchEnabled).toBe(false);
-  });
-
-  it('exposes client web tools for keyless BYOK providers even when the toggle is off', async () => {
-    const byokRequests: LLMRequest[] = [];
-
-    useStore.getState().setAppConfig({ webAccess: { provider: 'wikipedia', readerFallback: false } });
 
     await new AgentLoop(
       makeRegistry(),
       makeExecutor(webTools) as unknown as ToolExecutor,
       new SnapshotManager(),
       noop
-    ).start('BYOK off', SCOPE, makeCapturingClient(byokRequests), CFG);
+    ).start('Keyless baked in', SCOPE, makeCapturingClient(requests), CFG);
 
-    expect(byokRequests[0].tools.map(t => t.name)).toEqual(['read_range', 'web_search', 'fetch_url', 'request_user_choice']);
-    expect(byokRequests[0].nativeSearch).toBeUndefined();
-    expect(useStore.getState().currentSession?.webSearchEnabled).toBe(false);
-  });
-
-  it('exposes keyless client web tools on native-tier models even when the toggle is off', async () => {
-    const requests: LLMRequest[] = [];
-
-    useStore.getState().setAppConfig({ webAccess: { provider: 'wikipedia', readerFallback: false } });
-
-    await new AgentLoop(
-      makeRegistry(),
-      makeExecutor(webTools) as unknown as ToolExecutor,
-      new SnapshotManager(),
-      noop
-    ).start('Native with keyless wiki off', SCOPE, makeCapturingClient(requests), GENERIC_CFG);
-
-    expect(requests[0].tools.map(t => t.name)).toEqual(['read_range', 'web_search', 'fetch_url', 'request_user_choice']);
+    expect(requests[0].tools.map(t => t.name)).toEqual(ALL_TOOLS);
     expect(requests[0].nativeSearch).toBeUndefined();
     expect(useStore.getState().currentSession?.webSearchEnabled).toBe(false);
   });
 
-  it('removes web tools when the toggle is off for native and keyed BYOK tiers', async () => {
-    const keyedRequests: LLMRequest[] = [];
-    const nativeRequests: LLMRequest[] = [];
+  it('enables keyed search when a keyed provider is configured and the toggle is on', async () => {
+    const requests: LLMRequest[] = [];
 
     useStore.getState().setAppConfig({ webAccess: { provider: 'tavily', readerFallback: false } });
+    useStore.getState().saveSearchApiKey('tavily', 'test-key');
+    useStore.getState().setWebSearchEnabled(true);
 
     await new AgentLoop(
       makeRegistry(),
       makeExecutor(webTools) as unknown as ToolExecutor,
       new SnapshotManager(),
       noop
-    ).start('Keyed BYOK off', SCOPE, makeCapturingClient(keyedRequests), CFG);
+    ).start('Search with keyed tier', SCOPE, makeCapturingClient(requests), CFG);
+
+    expect(requests[0].tools.map(t => t.name)).toEqual(ALL_TOOLS);
+    expect(useStore.getState().currentSession?.webSearchEnabled).toBe(true);
+  });
+
+  it('keeps client web tools and injects native search on the native tier when the toggle is on', async () => {
+    const requests: LLMRequest[] = [];
+
+    useStore.getState().setWebSearchEnabled(true);
+
+    await new AgentLoop(
+      makeRegistry(),
+      makeExecutor(webTools) as unknown as ToolExecutor,
+      new SnapshotManager(),
+      noop
+    ).start('Search with native tier', SCOPE, makeCapturingClient(requests), GENERIC_CFG);
+
+    expect(requests[0].tools.map(t => t.name)).toEqual(ALL_TOOLS);
+    expect(requests[0].nativeSearch?.provider).toBe('generic');
+    expect(useStore.getState().currentSession?.webSearchEnabled).toBe(true);
+  });
+
+  it('leaves keyed search off when the toggle is on but no keyed or native tier is available', async () => {
+    const requests: LLMRequest[] = [];
+
+    // No keyed provider configured; ollama has no native tier.
+    useStore.getState().setWebSearchEnabled(true);
+
+    await new AgentLoop(
+      makeRegistry(),
+      makeExecutor(webTools) as unknown as ToolExecutor,
+      new SnapshotManager(),
+      noop
+    ).start('Keyed search unavailable', SCOPE, makeCapturingClient(requests), CFG);
+
+    expect(requests[0].tools.map(t => t.name)).toEqual(ALL_TOOLS);
+    expect(requests[0].nativeSearch).toBeUndefined();
+    expect(useStore.getState().currentSession?.webSearchEnabled).toBe(false);
+  });
+
+  it('keeps native and keyed search off when the toggle is off, without touching the tool set', async () => {
+    const keyedRequests: LLMRequest[] = [];
+    const nativeRequests: LLMRequest[] = [];
+
+    useStore.getState().setAppConfig({ webAccess: { provider: 'tavily', readerFallback: false } });
+    useStore.getState().saveSearchApiKey('tavily', 'test-key');
+
+    await new AgentLoop(
+      makeRegistry(),
+      makeExecutor(webTools) as unknown as ToolExecutor,
+      new SnapshotManager(),
+      noop
+    ).start('Keyed off', SCOPE, makeCapturingClient(keyedRequests), CFG);
 
     await new AgentLoop(
       makeRegistry(),
@@ -369,11 +340,13 @@ describe('AgentLoop - web search gating', () => {
       noop
     ).start('Native off', SCOPE, makeCapturingClient(nativeRequests), GENERIC_CFG);
 
-    expect(keyedRequests[0].tools.map(t => t.name)).toEqual(['read_range', 'request_user_choice']);
-    expect(nativeRequests[0].tools.map(t => t.name)).toEqual(['read_range', 'request_user_choice']);
+    expect(keyedRequests[0].tools.map(t => t.name)).toEqual(ALL_TOOLS);
+    expect(keyedRequests[0].nativeSearch).toBeUndefined();
+    expect(nativeRequests[0].tools.map(t => t.name)).toEqual(ALL_TOOLS);
+    expect(nativeRequests[0].nativeSearch).toBeUndefined();
   });
 
-  it('rejects calls to filtered-out web tools without executing them', async () => {
+  it('rejects hallucinated tool names without executing them', async () => {
     const executed: string[] = [];
     const executor: Partial<ToolExecutor> = {
       getToolSpecs: () => webTools,
@@ -384,42 +357,45 @@ describe('AgentLoop - web search gating', () => {
     };
     const loop = new AgentLoop(makeRegistry(), executor as unknown as ToolExecutor, new SnapshotManager(), noop);
 
-    // Web access unconfigured → web tools filtered from the run, but the model
-    // hallucinates a web_search call anyway (e.g. from prior-session history).
+    // The model invents a tool that is not registered anywhere.
     const client = makeTwoTurnClient(
-      toolCallStream('t1', 'web_search', '{"query":"gdp"}'),
+      toolCallStream('t1', 'made_up_tool', '{"query":"gdp"}'),
       textStream('understood')
     );
-    await loop.start('Hallucinated web call', SCOPE, client, CFG);
+    await loop.start('Hallucinated tool call', SCOPE, client, CFG);
 
-    expect(executed).not.toContain('web_search');
+    expect(executed).not.toContain('made_up_tool');
     const toolResult = useStore.getState().messages.find(m => m.role === 'tool');
     expect(toolResult).toBeDefined();
     if (toolResult?.role === 'tool') {
       expect(toolResult.result.ok).toBe(false);
       expect(toolResult.result.error?.code).toBe('ValidationError');
-      expect(toolResult.result.error?.message).toContain('Settings → Web Access');
+      expect(toolResult.result.error?.message).toContain('not available in this session');
     }
     expect(useStore.getState().currentSession?.status).toBe('done');
   });
 
-  it('system prompt reflects web availability and the reader-fallback setting', async () => {
-    // Web access unconfigured → prompt must warn that web tools do not exist.
-    const noWebRequests: LLMRequest[] = [];
+  it('system prompt reflects the keyed-search state and the reader-fallback setting', async () => {
+    // Default: keyless catalogues only — the prompt scopes web_search accordingly.
+    const keylessOnlyRequests: LLMRequest[] = [];
     await new AgentLoop(makeRegistry(), makeExecutor(webTools) as unknown as ToolExecutor, new SnapshotManager(), noop)
-      .start('no web', SCOPE, makeCapturingClient(noWebRequests), CFG);
-    expect(noWebRequests[0].system).toContain('NOT available in this session');
-    expect(noWebRequests[0].system).not.toContain('reader proxy');
+      .start('keyless only', SCOPE, makeCapturingClient(keylessOnlyRequests), CFG);
+    expect(keylessOnlyRequests[0].system).toContain('keyless public catalogues only');
+    expect(keylessOnlyRequests[0].system).toContain('General internet search is NOT available in this session');
+    expect(keylessOnlyRequests[0].system).toContain('NO automatic proxy fallback');
 
-    // Keyless provider, fallback off → no proxy promise, points at Settings.
-    useStore.getState().setAppConfig({ webAccess: { provider: 'wikipedia', readerFallback: false } });
-    const noProxyRequests: LLMRequest[] = [];
+    // Keyed provider configured and toggle on → general-internet variant.
+    useStore.getState().setAppConfig({ webAccess: { provider: 'tavily', readerFallback: false } });
+    useStore.getState().saveSearchApiKey('tavily', 'test-key');
+    useStore.getState().setWebSearchEnabled(true);
+    const keyedRequests: LLMRequest[] = [];
     await new AgentLoop(makeRegistry(), makeExecutor(webTools) as unknown as ToolExecutor, new SnapshotManager(), noop)
-      .start('web, no proxy', SCOPE, makeCapturingClient(noProxyRequests), CFG);
-    expect(noProxyRequests[0].system).toContain('NO automatic proxy fallback');
+      .start('keyed search on', SCOPE, makeCapturingClient(keyedRequests), CFG);
+    expect(keyedRequests[0].system).toContain("runs on the user's configured search provider");
 
     // Fallback on → prompt may promise the automatic reader proxy.
-    useStore.getState().setAppConfig({ webAccess: { provider: 'wikipedia', readerFallback: true } });
+    useStore.getState().setWebSearchEnabled(false);
+    useStore.getState().setAppConfig({ webAccess: { provider: 'none', readerFallback: true } });
     const proxyRequests: LLMRequest[] = [];
     await new AgentLoop(makeRegistry(), makeExecutor(webTools) as unknown as ToolExecutor, new SnapshotManager(), noop)
       .start('web with proxy', SCOPE, makeCapturingClient(proxyRequests), CFG);
@@ -514,7 +490,7 @@ describe('AgentLoop — non-mutating tool call', () => {
     };
     const executor = makeExecutor([spec], { toolCallId: 'tc', ok: true, data: { values: [['A']] } });
     const events = [
-      ...Array.from({ length: 26 }, (_, i) =>
+      ...Array.from({ length: 51 }, (_, i) =>
         toolCallStream(`tc${i}`, 'read_range', JSON.stringify({ workbook_id: 'wb1', sheet: 'Sheet1', address: 'A1' }))
       ),
       textStream('Now complete.'),
@@ -532,15 +508,15 @@ describe('AgentLoop — non-mutating tool call', () => {
     let state = useStore.getState();
     expect(state.currentSession?.status).toBe('done');
     expect(state.currentSession?.stopReason).toBe('max_iterations');
-    expect(state.currentSession?.iteration).toBe(25);
-    expect(state.currentSession?.maxIterations).toBe(25);
+    expect(state.currentSession?.iteration).toBe(50);
+    expect(state.currentSession?.maxIterations).toBe(50);
 
     await loop.continueCurrent(client, CFG);
 
     state = useStore.getState();
     expect(state.currentSession?.status).toBe('done');
     expect(state.currentSession?.stopReason).toBeUndefined();
-    expect(state.currentSession?.maxIterations).toBe(50);
+    expect(state.currentSession?.maxIterations).toBe(100);
     const assistantMessages = state.messages.filter(m => m.role === 'assistant') as Array<{ text: string }>;
     const final = assistantMessages[assistantMessages.length - 1];
     expect(final.text).toBe('Now complete.');

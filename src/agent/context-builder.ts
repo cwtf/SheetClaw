@@ -136,7 +136,7 @@ export class ContextBuilder {
     cfg: ProviderConfig
   ): LLMRequest {
     const system = buildSystemPrompt(session.scope.workbookId, {
-      toolsAvailable: tools.some(t => t.name === 'web_search' || t.name === 'fetch_url'),
+      keyedSearchEnabled: session.webSearchEnabled,
       readerFallback: this.getReaderFallback(),
     });
     const manifest = this.registry.getManifest();

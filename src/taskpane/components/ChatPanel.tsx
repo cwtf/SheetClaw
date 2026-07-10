@@ -16,7 +16,6 @@ import { useStore } from '../../store/index';
 import type { Message, CellDiff } from '../../types';
 import { createAdapter } from '../../adapters/index';
 import { getUnavailableSearchToggleHint, resolveSearchToggle } from '../../adapters/native-search';
-import { getSearchProvider, isKeylessSearchProvider } from '../../web/providers';
 import type { ChoiceSelection } from '../../agent/loop';
 import { getTaskpaneAgentLoop, getTaskpaneWorkbookLayer } from '../workbookLayer';
 
@@ -138,10 +137,6 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
     model: activeProvider?.model ?? '',
     byokReady: byokSearchReady,
   });
-  const selectedSearchProvider = getSearchProvider(appConfig.webAccess.provider);
-  const keylessSearchActive = appConfig.webAccess.provider !== 'none'
-    && byokSearchReady
-    && isKeylessSearchProvider(appConfig.webAccess.provider);
   const modelReady = !!activeProvider?.model.trim();
   const providerReady = !!activeProvider?.enabled && activeProviderReady && modelReady;
   const providerWarning = !activeProvider?.enabled
@@ -151,7 +146,9 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
       : !modelReady
         ? 'Select a model in Settings before chatting.'
         : '';
-  const effectiveSearchEnabled = keylessSearchActive || (webSearchEnabled && searchToggle.available);
+  // The pill strictly reflects keyed BYOK / native search; keyless catalogue
+  // search is always on in the background and has no pill state.
+  const keyedSearchEnabled = webSearchEnabled && searchToggle.available;
 
   useEffect(() => {
     getTaskpaneWorkbookLayer().registry.refresh().catch(e => {
@@ -397,15 +394,11 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
             <Button
               size="small"
               appearance="secondary"
-              aria-pressed={effectiveSearchEnabled}
-              aria-disabled={!keylessSearchActive && !searchToggle.available}
-              style={composerPillStyle(effectiveSearchEnabled, !keylessSearchActive && !searchToggle.available)}
+              aria-pressed={keyedSearchEnabled}
+              aria-disabled={!searchToggle.available}
+              style={composerPillStyle(keyedSearchEnabled, !searchToggle.available)}
               icon={<PillIcon>🌐</PillIcon>}
               onClick={() => {
-                if (keylessSearchActive) {
-                  setSearchHint(`${selectedSearchProvider?.label ?? 'The selected search provider'} is keyless and available whenever it is selected in Settings. Choose None in Settings to disable it.`);
-                  return;
-                }
                 if (!searchToggle.available) {
                   setWebSearchEnabled(false);
                   setSearchHint(getUnavailableSearchToggleHint(activeProvider?.label ?? appConfig.activeProvider, searchToggle));

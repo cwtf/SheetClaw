@@ -29,7 +29,7 @@ import {
   getSearchSettingsStatusText,
   resolveSearchTier,
 } from '../../adapters/native-search';
-import { getSearchProvider, KEYLESS_BUNDLE_ID, keylessBundleProvider, SEARCH_PROVIDERS, type SearchProviderId, type WebAccessProvider } from '../../web/providers';
+import { getSearchProvider, KEYLESS_BUNDLE_ID, SEARCH_PROVIDERS, type SearchProviderId, type WebAccessProvider } from '../../web/providers';
 
 type ApiProvider = Exclude<ProviderKey, 'ollama'>;
 export type SettingsTabKey = 'ollama' | 'api' | 'search';
@@ -367,9 +367,12 @@ function SearchSettingsForm({
   onSaveKey: (provider: SearchProviderId, key: string) => void;
   onClearKey: (provider: SearchProviderId) => void;
 }) {
-  const selectedProvider = provider === 'none' ? 'tavily' : provider;
+  // Keyless catalogue search is baked in and not selectable here; this tab
+  // only configures keyed (or self-hosted) internet search providers.
+  const selectedProvider: SearchProviderId =
+    provider === 'none' || provider === KEYLESS_BUNDLE_ID ? 'tavily' : provider;
   const adapter = getSearchProvider(selectedProvider);
-  const auth = selectedProvider === KEYLESS_BUNDLE_ID ? undefined : searchAuthStates[selectedProvider];
+  const auth = searchAuthStates[selectedProvider];
   const activeSearchTier = resolveSearchTier(activeProvider.provider, activeProvider.model);
   const activeProviderLabel = activeProvider.label || activeProvider.provider;
   const statusText = getSearchSettingsStatusText(activeProviderLabel, activeSearchTier);
@@ -391,7 +394,7 @@ function SearchSettingsForm({
   }, [engineId]);
 
   function saveKey() {
-    if (!apiKey.trim() || selectedProvider === KEYLESS_BUNDLE_ID) return;
+    if (!apiKey.trim()) return;
     onSaveKey(selectedProvider, apiKey);
     onSaveConfig({ provider: selectedProvider });
     setApiKey('');
@@ -420,6 +423,12 @@ function SearchSettingsForm({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
+        Keyless catalogue search (Wikipedia, Wikidata, World Bank, IMF, Eurostat, ECB, UN SDG,
+        CKAN, data.gov.my, data.gov.sg, Open-Meteo) is always available to the agent and needs
+        no setup. This tab only adds keyed internet search.
+      </Caption1>
+
       <MessageBar intent={activeSearchTier.tier === 'native' ? 'success' : 'info'}>
         <MessageBarBody>
           <Caption1>{statusText}</Caption1>
@@ -427,9 +436,9 @@ function SearchSettingsForm({
       </MessageBar>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Label size="small">BYOK search provider</Label>
+        <Label size="small">Keyed search provider</Label>
         <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-          Used for providers without native web search; keyless providers are available whenever selected.
+          Used for general internet search when the Chat Search toggle is on. None = keyless catalogues only.
         </Caption1>
         {byokNote && (
           <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
@@ -445,7 +454,6 @@ function SearchSettingsForm({
           size="small"
         >
           <option value="none">None</option>
-          <option value={KEYLESS_BUNDLE_ID}>{keylessBundleProvider.label}</option>
           {Object.values(SEARCH_PROVIDERS).filter(p => p.requiresKey || p.selfHosted).map(p => (
             <option key={p.id} value={p.id}>{p.label}</option>
           ))}
@@ -455,11 +463,9 @@ function SearchSettingsForm({
       {adapter && (
         <>
           <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-            {adapter.id === KEYLESS_BUNDLE_ID
-              ? 'Bundles every keyless catalogue (Wikipedia, Wikidata, World Bank, IMF, Eurostat, ECB, UN SDG, CKAN, data.gov.my, data.gov.sg, Open-Meteo). The agent routes each search to the best source. Available without the Chat Search toggle; choose None to disable it.'
-              : adapter.requiresKey
-                ? 'Search uses your own provider key. It is off for each new session until you enable it in Chat.'
-                : 'This provider is keyless. Once selected, it is available without the Chat Search toggle; choose None to disable it.'}
+            {adapter.requiresKey
+              ? 'Search uses your own provider key. It is off for each new session until you enable it in Chat.'
+              : 'This self-hosted provider needs no key. It is off for each new session until you enable Search in Chat.'}
           </Caption1>
           {adapter.signupUrl && (
             <a href={adapter.signupUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
@@ -501,18 +507,16 @@ function SearchSettingsForm({
             </Field>
           )}
 
-          {adapter.id !== KEYLESS_BUNDLE_ID && (
-            <Field label="Base URL (optional)">
-              <Input
-                value={localBaseUrl}
-                onChange={(_, d) => setLocalBaseUrl(d.value)}
-                onBlur={() => onSaveConfig({ baseUrl: localBaseUrl })}
-                placeholder={adapter.endpoint}
-                size="small"
-                style={{ fontFamily: 'monospace', fontSize: 12 }}
-              />
-            </Field>
-          )}
+          <Field label="Base URL (optional)">
+            <Input
+              value={localBaseUrl}
+              onChange={(_, d) => setLocalBaseUrl(d.value)}
+              onBlur={() => onSaveConfig({ baseUrl: localBaseUrl })}
+              placeholder={adapter.endpoint}
+              size="small"
+              style={{ fontFamily: 'monospace', fontSize: 12 }}
+            />
+          </Field>
 
           <Checkbox
             label="Allow reader fallback for fetched URLs"

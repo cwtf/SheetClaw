@@ -156,7 +156,7 @@ export function getByokSectionNote(
   resolution: SearchTierResolution
 ): string | undefined {
   if (resolution.tier !== 'native') return undefined;
-  return `${providerLabel} also supports native search; selected keyless providers remain available, while keyed providers are secondary.`;
+  return `${providerLabel} also supports native search; keyless catalogue search is always available, and a keyed provider is secondary.`;
 }
 
 export function getProviderNativeSearchCaption(provider: ProviderKey, model: string): string {
@@ -173,9 +173,9 @@ export function getUnavailableSearchToggleHint(
   resolution: SearchTierResolution
 ): string {
   if (resolution.nativeUnavailableReason) {
-    return `${providerLabel} native search is not available for ${resolution.model || 'this model'}. ${resolution.nativeUnavailableReason} Select a supported model or configure a Search tab provider.`;
+    return `${providerLabel} native search is not available for ${resolution.model || 'this model'}. ${resolution.nativeUnavailableReason} Select a supported model or configure a Search tab provider. Keyless catalogue search remains available either way.`;
   }
-  return `${providerLabel} has no native web search. Configure a Search tab provider to enable search.`;
+  return `${providerLabel} has no native web search. Configure a Search tab provider to enable general internet search. Keyless catalogue search remains available either way.`;
 }
 
 export function getOpenAINativeSearchPatch(

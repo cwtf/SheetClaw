@@ -19,11 +19,9 @@ import { ContextBuilder } from './context-builder';
 import { computeRangeDiff } from '../workbook/a1notation';
 import { useStore } from '../store/index';
 import { findPricing, computeCost } from '../pricing/index';
-import { filterToolsForRun } from './tool-filter';
 import { REQUEST_USER_CHOICE, parsePendingChoice } from './choice';
 import { ToolValidationError } from '../workbook/executor';
 import { resolveSearchToggle } from '../adapters/native-search';
-import { isKeylessSearchProvider, type WebAccessProvider } from '../web/providers';
 
 const MAX_ITERATIONS = 50;
 const ACTIVE_STATUSES = new Set<AgentSession['status']>([
@@ -79,11 +77,9 @@ export class AgentLoop {
     const ac = new AbortController();
     this.abortController = ac;
     const store = useStore.getState();
-    const webProvider = store.appConfig.webAccess.provider;
-    const byokReady = webProvider !== 'none' && store.isSearchProviderReady(webProvider);
-    const searchToggle = resolveSearchToggle({ provider: cfg.provider, model: cfg.model, byokReady });
-    const forceClientWebSearch = shouldForceClientWebSearch(webProvider, byokReady);
-    const manualWebSearchEnabled = !forceClientWebSearch && store.webSearchEnabled && searchToggle.available;
+    // Keyless catalogue search is always available (baked into the tool set);
+    // this only decides whether keyed BYOK / native search is on for the run.
+    const keyedSearchEnabled = store.webSearchEnabled && resolveKeyedSearchAvailable(cfg);
 
     const session: AgentSession = {
       id: ulid(),
@@ -96,7 +92,7 @@ export class AgentLoop {
       model: cfg.model,
       messageIds: [],
       tokenBudget: { used: 0, window: cfg.contextLimits.maxContextTokens },
-      webSearchEnabled: manualWebSearchEnabled,
+      webSearchEnabled: keyedSearchEnabled,
       totals: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
     };
 
@@ -138,11 +134,7 @@ export class AgentLoop {
     const ac = new AbortController();
     this.abortController = ac;
     const store = useStore.getState();
-    const webProvider = store.appConfig.webAccess.provider;
-    const byokReady = webProvider !== 'none' && store.isSearchProviderReady(webProvider);
-    const searchToggle = resolveSearchToggle({ provider: cfg.provider, model: cfg.model, byokReady });
-    const forceClientWebSearch = shouldForceClientWebSearch(webProvider, byokReady);
-    const manualWebSearchEnabled = !forceClientWebSearch && store.webSearchEnabled && searchToggle.available;
+    const keyedSearchEnabled = store.webSearchEnabled && resolveKeyedSearchAvailable(cfg);
     const session: AgentSession = {
       ...current,
       scope,
@@ -156,7 +148,7 @@ export class AgentLoop {
       stopReason: undefined,
       lastError: undefined,
       tokenBudget: { used: 0, window: cfg.contextLimits.maxContextTokens },
-      webSearchEnabled: manualWebSearchEnabled,
+      webSearchEnabled: keyedSearchEnabled,
     };
 
     store.updateSessionById(session.id, {
@@ -268,15 +260,10 @@ export class AgentLoop {
     ctxBuilder: ContextBuilder,
     signal: AbortSignal
   ): Promise<void> {
-    const store = useStore.getState();
-    const webProvider = store.appConfig.webAccess.provider;
-    const byokReady = webProvider !== 'none' && store.isSearchProviderReady(webProvider);
-    const searchToggle = resolveSearchToggle({ provider: cfg.provider, model: cfg.model, byokReady });
-    const forceClientWebSearch = shouldForceClientWebSearch(webProvider, byokReady);
-    const toolSpecs = [
-      ...filterToolsForRun(this.executor.getToolSpecs(), session.webSearchEnabled, searchToggle, { forceClientWebSearch }),
-      REQUEST_USER_CHOICE,
-    ];
+    // Web tools are always advertised: web_search is backed by the keyless
+    // bundle by default and needs no configuration. Keyed/native search layers
+    // on top via session.webSearchEnabled (handler routing + nativeSearch patch).
+    const toolSpecs = [...this.executor.getToolSpecs(), REQUEST_USER_CHOICE];
     // Read-only tools that run outside the Excel runtime (web_search, fetch_url)
     // are safe to execute concurrently; each network call can block for seconds.
     // request_user_choice blocks on user input, so it stays sequential.
@@ -285,9 +272,8 @@ export class AgentLoop {
         .filter(s => !s.mutating && s.runtime === 'none' && s.name !== REQUEST_USER_CHOICE.name)
         .map(s => s.name)
     );
-    // The executor keeps every tool registered; only names advertised in this
-    // run may execute, so calls to filtered-out tools (e.g. web tools while web
-    // access is unconfigured) fail fast with a corrective message.
+    // Only names advertised in this run may execute; with web tools always
+    // present this now only catches hallucinated tool names.
     const allowedTools = new Set(toolSpecs.map(s => s.name));
 
     for (let iter = session.iteration; iter < session.maxIterations; iter++) {
@@ -487,15 +473,12 @@ export class AgentLoop {
     }
 
     if (!allowedTools.has(call.name)) {
-      const isWebTool = call.name === 'web_search' || call.name === 'fetch_url';
       const result = {
         toolCallId: call.id,
         ok: false as const,
         error: {
           code: 'ValidationError' as const,
-          message: isWebTool
-            ? `"${call.name}" is not available in this session: web access is not configured or web search is turned off. Do not call web tools again. Complete the task with workbook data, or tell the user they can enable a search provider in Settings → Web Access.`
-            : `Tool "${call.name}" is not available in this session. Use only the tools in your tool list.`,
+          message: `Tool "${call.name}" is not available in this session. Use only the tools in your tool list.`,
         },
       };
       this.append(session.id, msg<ToolResultMessage>(session.id, { role: 'tool', toolCallId: call.id, result }));
@@ -655,11 +638,12 @@ function msg<T extends Message>(sessionId: string, fields: Omit<T, 'id' | 'sessi
   return { id: ulid(), sessionId, createdAt: new Date().toISOString(), ...fields } as unknown as T;
 }
 
-function shouldForceClientWebSearch(
-  webProvider: WebAccessProvider,
-  providerReady: boolean
-): boolean {
-  return providerReady && isKeylessSearchProvider(webProvider);
+/** True when keyed BYOK or native (provider-billed) search can be enabled for this run. */
+function resolveKeyedSearchAvailable(cfg: ProviderConfig): boolean {
+  const store = useStore.getState();
+  const webProvider = store.appConfig.webAccess.provider;
+  const byokReady = webProvider !== 'none' && store.isSearchProviderReady(webProvider);
+  return resolveSearchToggle({ provider: cfg.provider, model: cfg.model, byokReady }).available;
 }
 
 function readerFallbackEnabled(): boolean {
