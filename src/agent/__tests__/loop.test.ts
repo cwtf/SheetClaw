@@ -373,6 +373,59 @@ describe('AgentLoop - web search gating', () => {
     expect(nativeRequests[0].tools.map(t => t.name)).toEqual(['read_range', 'request_user_choice']);
   });
 
+  it('rejects calls to filtered-out web tools without executing them', async () => {
+    const executed: string[] = [];
+    const executor: Partial<ToolExecutor> = {
+      getToolSpecs: () => webTools,
+      execute: async (call) => {
+        executed.push(call.name);
+        return { toolCallId: call.id, ok: true, data: { result: 'ok' } };
+      },
+    };
+    const loop = new AgentLoop(makeRegistry(), executor as unknown as ToolExecutor, new SnapshotManager(), noop);
+
+    // Web access unconfigured → web tools filtered from the run, but the model
+    // hallucinates a web_search call anyway (e.g. from prior-session history).
+    const client = makeTwoTurnClient(
+      toolCallStream('t1', 'web_search', '{"query":"gdp"}'),
+      textStream('understood')
+    );
+    await loop.start('Hallucinated web call', SCOPE, client, CFG);
+
+    expect(executed).not.toContain('web_search');
+    const toolResult = useStore.getState().messages.find(m => m.role === 'tool');
+    expect(toolResult).toBeDefined();
+    if (toolResult?.role === 'tool') {
+      expect(toolResult.result.ok).toBe(false);
+      expect(toolResult.result.error?.code).toBe('ValidationError');
+      expect(toolResult.result.error?.message).toContain('Settings → Web Access');
+    }
+    expect(useStore.getState().currentSession?.status).toBe('done');
+  });
+
+  it('system prompt reflects web availability and the reader-fallback setting', async () => {
+    // Web access unconfigured → prompt must warn that web tools do not exist.
+    const noWebRequests: LLMRequest[] = [];
+    await new AgentLoop(makeRegistry(), makeExecutor(webTools) as unknown as ToolExecutor, new SnapshotManager(), noop)
+      .start('no web', SCOPE, makeCapturingClient(noWebRequests), CFG);
+    expect(noWebRequests[0].system).toContain('NOT available in this session');
+    expect(noWebRequests[0].system).not.toContain('reader proxy');
+
+    // Keyless provider, fallback off → no proxy promise, points at Settings.
+    useStore.getState().setAppConfig({ webAccess: { provider: 'wikipedia', readerFallback: false } });
+    const noProxyRequests: LLMRequest[] = [];
+    await new AgentLoop(makeRegistry(), makeExecutor(webTools) as unknown as ToolExecutor, new SnapshotManager(), noop)
+      .start('web, no proxy', SCOPE, makeCapturingClient(noProxyRequests), CFG);
+    expect(noProxyRequests[0].system).toContain('NO automatic proxy fallback');
+
+    // Fallback on → prompt may promise the automatic reader proxy.
+    useStore.getState().setAppConfig({ webAccess: { provider: 'wikipedia', readerFallback: true } });
+    const proxyRequests: LLMRequest[] = [];
+    await new AgentLoop(makeRegistry(), makeExecutor(webTools) as unknown as ToolExecutor, new SnapshotManager(), noop)
+      .start('web with proxy', SCOPE, makeCapturingClient(proxyRequests), CFG);
+    expect(proxyRequests[0].system).toContain('automatically retries any failed request through a reader proxy');
+  });
+
   it('echoes Kimi $web_search arguments without executing a local tool', async () => {
     const requests: LLMRequest[] = [];
     const executor = {

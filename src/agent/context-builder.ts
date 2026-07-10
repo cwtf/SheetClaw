@@ -123,7 +123,11 @@ function compact(
 // ── ContextBuilder ─────────────────────────────────────────────────────────
 
 export class ContextBuilder {
-  constructor(private registry: WorkbookRegistry) {}
+  constructor(
+    private registry: WorkbookRegistry,
+    // Injected so this module stays store-free (and testable in Node).
+    private getReaderFallback: () => boolean = () => false
+  ) {}
 
   build(
     session: AgentSession,
@@ -131,7 +135,10 @@ export class ContextBuilder {
     tools: ToolSpec[],
     cfg: ProviderConfig
   ): LLMRequest {
-    const system = buildSystemPrompt(session.scope.workbookId);
+    const system = buildSystemPrompt(session.scope.workbookId, {
+      toolsAvailable: tools.some(t => t.name === 'web_search' || t.name === 'fetch_url'),
+      readerFallback: this.getReaderFallback(),
+    });
     const manifest = this.registry.getManifest();
     const manifestStr = `\n\n<workbook_manifest>\n${JSON.stringify(manifest, null, 2)}\n</workbook_manifest>`;
 

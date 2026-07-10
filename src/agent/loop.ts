@@ -105,7 +105,7 @@ export class AgentLoop {
 
     this.append(session.id, msg<UserMessage>(session.id, { role: 'user', text: instruction }));
 
-    const ctxBuilder = new ContextBuilder(this.registry);
+    const ctxBuilder = new ContextBuilder(this.registry, readerFallbackEnabled);
 
     try {
       await this.loop(session, client, cfg, ctxBuilder, ac.signal);
@@ -175,7 +175,7 @@ export class AgentLoop {
     });
     this.append(session.id, msg<UserMessage>(session.id, { role: 'user', text: instruction }));
 
-    const ctxBuilder = new ContextBuilder(this.registry);
+    const ctxBuilder = new ContextBuilder(this.registry, readerFallbackEnabled);
     try {
       await this.loop(session, client, cfg, ctxBuilder, ac.signal);
     } catch (e) {
@@ -224,7 +224,7 @@ export class AgentLoop {
       text: `Continuing for ${additionalIterations} more iterations.`,
     }));
 
-    const ctxBuilder = new ContextBuilder(this.registry);
+    const ctxBuilder = new ContextBuilder(this.registry, readerFallbackEnabled);
     try {
       await this.loop(resumed, client, cfg, ctxBuilder, ac.signal);
     } catch (e) {
@@ -285,6 +285,10 @@ export class AgentLoop {
         .filter(s => !s.mutating && s.runtime === 'none' && s.name !== REQUEST_USER_CHOICE.name)
         .map(s => s.name)
     );
+    // The executor keeps every tool registered; only names advertised in this
+    // run may execute, so calls to filtered-out tools (e.g. web tools while web
+    // access is unconfigured) fail fast with a corrective message.
+    const allowedTools = new Set(toolSpecs.map(s => s.name));
 
     for (let iter = session.iteration; iter < session.maxIterations; iter++) {
       if (signal.aborted) return;
@@ -356,7 +360,7 @@ export class AgentLoop {
 
       // Execute tool calls — consecutive network reads run concurrently
       useStore.getState().updateSessionById(session.id, { status: 'executing_tool' });
-      await this.executeCalls(calls, session, signal, parallelizable);
+      await this.executeCalls(calls, session, signal, parallelizable, allowedTools);
     }
 
     useStore.getState().updateSessionById(session.id, { status: 'done', stopReason: 'max_iterations' });
@@ -435,7 +439,8 @@ export class AgentLoop {
     calls: ToolCall[],
     session: AgentSession,
     signal: AbortSignal,
-    parallelizable: Set<string>
+    parallelizable: Set<string>,
+    allowedTools: Set<string>
   ): Promise<void> {
     const scope = { workbookId: session.scope.workbookId };
     let i = 0;
@@ -445,6 +450,8 @@ export class AgentLoop {
       while (end < calls.length && parallelizable.has(calls[end].name)) end++;
       if (end - i >= 2) {
         // Results are appended in call order so the transcript stays deterministic.
+        // Batch members are drawn from parallelizable ⊆ toolSpecs, so they are
+        // always allowed for this run.
         const batch = calls.slice(i, end);
         const results = await Promise.all(batch.map(c => this.executor.execute(c, scope)));
         if (signal.aborted) return;
@@ -455,13 +462,18 @@ export class AgentLoop {
         }
         i = end;
       } else {
-        await this.executeCall(calls[i], session, signal);
+        await this.executeCall(calls[i], session, signal, allowedTools);
         i++;
       }
     }
   }
 
-  private async executeCall(call: ToolCall, session: AgentSession, signal: AbortSignal): Promise<void> {
+  private async executeCall(
+    call: ToolCall,
+    session: AgentSession,
+    signal: AbortSignal,
+    allowedTools: Set<string>
+  ): Promise<void> {
     const scope = { workbookId: session.scope.workbookId };
 
     if (session.provider === 'kimi' && session.webSearchEnabled && call.name === '$web_search') {
@@ -469,6 +481,22 @@ export class AgentLoop {
         toolCallId: call.id,
         ok: true as const,
         data: call.rawArguments ?? JSON.stringify(call.arguments),
+      };
+      this.append(session.id, msg<ToolResultMessage>(session.id, { role: 'tool', toolCallId: call.id, result }));
+      return;
+    }
+
+    if (!allowedTools.has(call.name)) {
+      const isWebTool = call.name === 'web_search' || call.name === 'fetch_url';
+      const result = {
+        toolCallId: call.id,
+        ok: false as const,
+        error: {
+          code: 'ValidationError' as const,
+          message: isWebTool
+            ? `"${call.name}" is not available in this session: web access is not configured or web search is turned off. Do not call web tools again. Complete the task with workbook data, or tell the user they can enable a search provider in Settings → Web Access.`
+            : `Tool "${call.name}" is not available in this session. Use only the tools in your tool list.`,
+        },
       };
       this.append(session.id, msg<ToolResultMessage>(session.id, { role: 'tool', toolCallId: call.id, result }));
       return;
@@ -632,4 +660,8 @@ function shouldForceClientWebSearch(
   providerReady: boolean
 ): boolean {
   return providerReady && isKeylessSearchProvider(webProvider);
+}
+
+function readerFallbackEnabled(): boolean {
+  return useStore.getState().appConfig.webAccess.readerFallback;
 }

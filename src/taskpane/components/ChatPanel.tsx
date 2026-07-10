@@ -673,9 +673,10 @@ function getToolCallState(call: ToolChainCall) {
     };
   }
   if (call.result && !call.result.ok || call.status === 'failed') {
+    const message = call.result?.error?.message?.trim();
     return {
       label: 'error',
-      outcome: 'failed',
+      outcome: message ? `failed — ${truncateErrorMessage(message)}` : 'failed',
       color: tokens.colorPaletteRedForeground1,
       accent: tokens.colorPaletteRedForeground1,
     };
@@ -686,6 +687,11 @@ function getToolCallState(call: ToolChainCall) {
     color: tokens.colorPaletteGreenForeground1,
     accent: tokens.colorPaletteGreenForeground1,
   };
+}
+
+function truncateErrorMessage(message: string): string {
+  const MAX = 180;
+  return message.length <= MAX ? message : `${message.slice(0, MAX)}…`;
 }
 
 function formatToolOutcome(data: unknown): string {
