@@ -22,6 +22,16 @@ import { getTaskpaneAgentLoop, getTaskpaneWorkbookLayer } from '../workbookLayer
 
 const STATUS_RUNNING = new Set(['building', 'calling_llm', 'parsing', 'executing_tool']);
 type ToolChainMessage = Extract<Message, { role: 'tool_call' | 'tool' }>;
+type ToolChainCall = {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  status?: Extract<Message, { role: 'tool_call' }>['status'];
+  result?: Extract<Message, { role: 'tool' }>['result'];
+};
+type ChatRenderItem =
+  | { type: 'message'; message: Message }
+  | { type: 'tool_chain'; id: string; calls: ToolChainCall[] };
 
 const STATUS_LABELS: Record<string, string> = {
   building: 'Preparing context',
@@ -238,6 +248,7 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
   }
 
   const visibleMessages = messages.filter(m => (m as Message & { sessionId?: string }).sessionId === session?.id);
+  const chatItems = buildChatRenderItems(visibleMessages);
   const awaitingChoice = session?.status === 'awaiting_choice';
   const canContinue = session?.status === 'done' && session.stopReason === 'max_iterations';
   const showEmptyState = visibleMessages.length === 0 && !isRunning && !awaitingConfirm && !awaitingChoice;
@@ -297,14 +308,10 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
             onOpenSettings={onOpenSettings}
           />
         )}
-        {visibleMessages.map((m, index) => {
-          if (isToolChainMessage(m)) {
-            if (index > 0 && isToolChainMessage(visibleMessages[index - 1])) return null;
-            const chain = collectToolChain(visibleMessages, index);
-            return <ToolCallChain key={m.id} messages={chain} />;
-          }
-          return <MessageBubble key={m.id} message={m} />;
-        })}
+        {chatItems.map(item => item.type === 'message'
+          ? <MessageBubble key={item.message.id} message={item.message} />
+          : <ToolCallChain key={item.id} calls={item.calls} />
+        )}
         {awaitingConfirm && session?.pendingChange && (
           <ConfirmationBlock
             diff={session.pendingChange.diff}
@@ -456,14 +463,99 @@ function isToolChainMessage(message: Message): message is ToolChainMessage {
   return message.role === 'tool_call' || message.role === 'tool';
 }
 
-function collectToolChain(messages: Message[], startIndex: number): ToolChainMessage[] {
-  const chain: ToolChainMessage[] = [];
-  for (let i = startIndex; i < messages.length; i++) {
-    const message = messages[i];
-    if (!isToolChainMessage(message)) break;
-    chain.push(message);
+function buildChatRenderItems(messages: Message[]): ChatRenderItem[] {
+  const items: ChatRenderItem[] = [];
+  let segment: Message[] = [];
+
+  function flushSegment() {
+    if (!segment.length) return;
+    items.push(...buildSegmentRenderItems(segment));
+    segment = [];
   }
-  return chain;
+
+  for (const message of messages) {
+    if (message.role === 'user') {
+      flushSegment();
+      items.push({ type: 'message', message });
+    } else {
+      segment.push(message);
+    }
+  }
+  flushSegment();
+
+  return items;
+}
+
+function buildSegmentRenderItems(segment: Message[]): ChatRenderItem[] {
+  const calls = collectToolCalls(segment);
+  if (!calls.length) {
+    return segment.map(message => ({ type: 'message', message }));
+  }
+
+  const items: ChatRenderItem[] = [];
+  const toolCallIds = new Set(calls.map(call => call.id));
+  let inserted = false;
+  const preferredInsertIndex = findToolChainInsertIndex(segment, toolCallIds);
+
+  segment.forEach((message, index) => {
+    if (!isToolChainMessage(message) && !isEmptyToolCallingAssistant(message)) {
+      items.push({ type: 'message', message });
+    }
+    if (!inserted && index === preferredInsertIndex) {
+      items.push({ type: 'tool_chain', id: `tool-chain-${calls[0].id}`, calls });
+      inserted = true;
+    }
+  });
+
+  if (!inserted) {
+    items.push({ type: 'tool_chain', id: `tool-chain-${calls[0].id}`, calls });
+  }
+  return items;
+}
+
+function collectToolCalls(messages: Message[]): ToolChainCall[] {
+  const calls = new Map<string, ToolChainCall>();
+
+  function ensureCall(id: string, name = 'tool', args: Record<string, unknown> = {}) {
+    const existing = calls.get(id);
+    if (existing) {
+      if (existing.name === 'tool' && name !== 'tool') existing.name = name;
+      if (!Object.keys(existing.arguments).length && Object.keys(args).length) existing.arguments = args;
+      return existing;
+    }
+    const call: ToolChainCall = { id, name, arguments: args };
+    calls.set(id, call);
+    return call;
+  }
+
+  for (const message of messages) {
+    if (message.role === 'assistant') {
+      for (const call of message.toolCalls ?? []) {
+        ensureCall(call.id, call.name, call.arguments);
+      }
+    } else if (message.role === 'tool_call') {
+      const call = ensureCall(message.toolCall.id, message.toolCall.name, message.toolCall.arguments);
+      call.status = message.status;
+    } else if (message.role === 'tool') {
+      const call = ensureCall(message.toolCallId);
+      call.result = message.result;
+    }
+  }
+
+  return [...calls.values()];
+}
+
+function findToolChainInsertIndex(segment: Message[], toolCallIds: Set<string>): number {
+  for (let i = segment.length - 1; i >= 0; i--) {
+    const message = segment[i];
+    if (message.role === 'assistant' && message.toolCalls?.some(call => toolCallIds.has(call.id))) return i;
+  }
+  const firstToolIndex = segment.findIndex(isToolChainMessage);
+  return firstToolIndex > 0 ? firstToolIndex - 1 : 0;
+}
+
+function isEmptyToolCallingAssistant(message: Message): boolean {
+  return message.role === 'assistant' && !!message.toolCalls?.length && message.text.trim().length === 0;
 }
 
 function SendIcon() {
@@ -482,90 +574,127 @@ function SendIcon() {
   );
 }
 
-function ToolCallChain({ messages }: { messages: ToolChainMessage[] }) {
-  const calls = messages.filter((message): message is Extract<Message, { role: 'tool_call' }> => message.role === 'tool_call');
-  const results = messages.filter((message): message is Extract<Message, { role: 'tool' }> => message.role === 'tool');
-  const failed = results.filter(message => !message.result.ok).length;
-  const pending = calls.filter(call => !results.some(result => result.toolCallId === call.toolCall.id)).length;
-  const names = calls.map(call => call.toolCall.name);
-  const summary = names.length
-    ? names.slice(0, 3).join(', ') + (names.length > 3 ? ` +${names.length - 3} more` : '')
-    : 'Tool result';
+function ToolCallChain({ calls }: { calls: ToolChainCall[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const complete = calls.filter(call => call.result || call.status === 'applied' || call.status === 'failed').length;
+  const failed = calls.filter(call => call.result ? !call.result.ok : call.status === 'failed').length;
 
   return (
-    <details style={{
+    <div style={{
       border: `1px solid ${tokens.colorNeutralStroke1}`,
       borderRadius: 6,
       background: tokens.colorNeutralBackground1,
       overflow: 'hidden',
+      boxShadow: expanded ? `0 0 0 1px ${tokens.colorBrandStroke1}` : undefined,
     }}>
-      <summary style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 8,
-        padding: '6px 8px',
-        cursor: 'pointer',
-        color: tokens.colorNeutralForeground2,
-        userSelect: 'none',
-      }}>
-        <Caption1 style={{ fontWeight: 600, overflowWrap: 'anywhere' }}>
-          Tool calls: {summary}
-        </Caption1>
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded(value => !value)}
+        style={{
+          width: '100%',
+          border: 0,
+          background: 'transparent',
+          color: tokens.colorNeutralForeground2,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          padding: '7px 9px',
+          cursor: 'pointer',
+          textAlign: 'left',
+        }}
+      >
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+          minWidth: 0,
+          fontSize: 12,
+          fontWeight: 600,
+        }}>
+          <span aria-hidden="true" style={{ color: tokens.colorBrandForeground1, width: 10 }}>
+            {expanded ? '-' : '+'}
+          </span>
+          <span>Tool calls ({calls.length})</span>
+        </span>
         <Caption1 style={{
           color: failed ? tokens.colorPaletteRedForeground1 : tokens.colorNeutralForeground3,
           flexShrink: 0,
+          fontFamily: 'monospace',
         }}>
-          {calls.length} call{calls.length === 1 ? '' : 's'}
-          {failed ? `, ${failed} failed` : pending ? `, ${pending} pending` : ''}
+          {complete}/{calls.length} complete{failed ? `, ${failed} failed` : ''}
         </Caption1>
-      </summary>
-      <div style={{
-        borderTop: `1px solid ${tokens.colorNeutralStroke1}`,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-        padding: 8,
-      }}>
-        {messages.map(message => (
-          <ToolChainRow key={message.id} message={message} />
-        ))}
-      </div>
-    </details>
+      </button>
+      {expanded && (
+        <div style={{
+          borderTop: `1px solid ${tokens.colorNeutralStroke1}`,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+          padding: 8,
+        }}>
+          {calls.map(call => (
+            <ToolChainRow key={call.id} call={call} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
-function ToolChainRow({ message }: { message: ToolChainMessage }) {
-  if (message.role === 'tool_call') {
-    return (
-      <Caption1 style={{
-        display: 'block',
-        minWidth: 0,
-        maxWidth: '100%',
-        color: tokens.colorNeutralForeground3,
-        fontFamily: 'monospace',
-        whiteSpace: 'pre-wrap',
-        overflowWrap: 'anywhere',
-      }}>
-        Tool: {message.toolCall.name}({JSON.stringify(message.toolCall.arguments).slice(0, 240)})
-      </Caption1>
-    );
-  }
-
-  const ok = message.result.ok;
+function ToolChainRow({ call }: { call: ToolChainCall }) {
+  const state = getToolCallState(call);
   return (
-    <Caption1 style={{
-      display: 'block',
-      minWidth: 0,
-      maxWidth: '100%',
-      color: ok ? tokens.colorPaletteGreenForeground1 : tokens.colorPaletteRedForeground1,
+    <div style={{
+      border: `1px solid ${tokens.colorNeutralStroke1}`,
+      borderLeft: `3px solid ${state.accent}`,
+      borderRadius: 6,
+      background: tokens.colorNeutralBackground2,
+      color: state.color,
       fontFamily: 'monospace',
-      whiteSpace: 'pre-wrap',
+      fontSize: 11,
+      lineHeight: 1.35,
+      padding: '6px 8px',
+      minWidth: 0,
       overflowWrap: 'anywhere',
     }}>
-      {ok ? 'OK' : 'ERR'} {message.toolCallId.slice(0, 12)}... {ok ? JSON.stringify(message.result.data).slice(0, 240) : message.result.error?.message}
-    </Caption1>
+      <strong>{state.label}:</strong> {call.name}{state.outcome ? ` -> ${state.outcome}` : ''}
+    </div>
   );
+}
+
+function getToolCallState(call: ToolChainCall) {
+  if (!call.result && call.status !== 'applied' && call.status !== 'failed') {
+    return {
+      label: 'running',
+      outcome: '',
+      color: '#25b7d3',
+      accent: '#25b7d3',
+    };
+  }
+  if (call.result && !call.result.ok || call.status === 'failed') {
+    return {
+      label: 'error',
+      outcome: 'failed',
+      color: tokens.colorPaletteRedForeground1,
+      accent: tokens.colorPaletteRedForeground1,
+    };
+  }
+  return {
+    label: 'ok',
+    outcome: formatToolOutcome(call.result?.data),
+    color: tokens.colorPaletteGreenForeground1,
+    accent: tokens.colorPaletteGreenForeground1,
+  };
+}
+
+function formatToolOutcome(data: unknown): string {
+  if (data && typeof data === 'object') {
+    const status = (data as { status?: unknown }).status;
+    if (typeof status === 'string' && status.trim()) return status;
+  }
+  return 'ok';
 }
 
 function EmptyChatState({
