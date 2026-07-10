@@ -25,7 +25,7 @@ import { ToolValidationError } from '../workbook/executor';
 import { resolveSearchToggle } from '../adapters/native-search';
 import { isKeylessSearchProvider, type WebAccessProvider } from '../web/providers';
 
-const MAX_ITERATIONS = 25;
+const MAX_ITERATIONS = 50;
 const ACTIVE_STATUSES = new Set<AgentSession['status']>([
   'building',
   'calling_llm',
