@@ -3,8 +3,17 @@ import { googleCseProvider } from './google-cse';
 import { jinaProvider } from './jina';
 import { searxngProvider } from './searxng';
 import { wikipediaProvider } from './wikipedia';
+import { wikidataProvider } from './wikidata';
+import { worldBankProvider } from './worldbank';
 
-export type SearchProviderId = 'tavily' | 'google-cse' | 'jina' | 'searxng' | 'wikipedia';
+export type SearchProviderId =
+  | 'tavily'
+  | 'google-cse'
+  | 'jina'
+  | 'searxng'
+  | 'wikipedia'
+  | 'wikidata'
+  | 'worldbank';
 export type WebAccessProvider = 'none' | SearchProviderId;
 
 export interface SearchResult {
@@ -48,6 +57,8 @@ export const SEARCH_PROVIDERS: Record<SearchProviderId, SearchProviderAdapter> =
   jina: jinaProvider,
   searxng: searxngProvider,
   wikipedia: wikipediaProvider,
+  wikidata: wikidataProvider,
+  worldbank: worldBankProvider,
 };
 
 export const SEARCH_PROVIDER_IDS = Object.keys(SEARCH_PROVIDERS) as SearchProviderId[];
@@ -66,6 +77,11 @@ export const PROVIDER_URL_HOST_ALLOWLIST = Object.values(SEARCH_PROVIDERS).flatM
 export function getSearchProvider(id: WebAccessProvider): SearchProviderAdapter | null {
   if (id === 'none') return null;
   return SEARCH_PROVIDERS[id] ?? null;
+}
+
+export function isKeylessSearchProvider(id: WebAccessProvider): boolean {
+  const provider = getSearchProvider(id);
+  return provider?.requiresKey === false;
 }
 
 /**

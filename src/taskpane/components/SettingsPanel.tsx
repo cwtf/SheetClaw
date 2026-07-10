@@ -454,7 +454,9 @@ function SearchSettingsForm({
       {adapter && (
         <>
           <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-            Search is optional and uses your own provider key. It is off for each new session until you enable it in Chat.
+            {adapter.requiresKey
+              ? 'Search uses your own provider key. It is off for each new session until you enable it in Chat.'
+              : 'This provider is keyless. Once selected, it is available without the Chat Search toggle; choose None to disable it.'}
           </Caption1>
           <a href={adapter.signupUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
             {adapter.requiresKey ? `Get a ${adapter.label} key` : `${adapter.label} setup guide`}

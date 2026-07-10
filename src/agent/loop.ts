@@ -23,6 +23,7 @@ import { filterToolsForRun } from './tool-filter';
 import { REQUEST_USER_CHOICE, parsePendingChoice } from './choice';
 import { ToolValidationError } from '../workbook/executor';
 import { resolveSearchToggle } from '../adapters/native-search';
+import { isKeylessSearchProvider, type WebAccessProvider } from '../web/providers';
 
 const MAX_ITERATIONS = 25;
 const ACTIVE_STATUSES = new Set<AgentSession['status']>([
@@ -81,6 +82,7 @@ export class AgentLoop {
     const webProvider = store.appConfig.webAccess.provider;
     const byokReady = webProvider !== 'none' && store.isSearchProviderReady(webProvider);
     const searchToggle = resolveSearchToggle({ provider: cfg.provider, model: cfg.model, byokReady });
+    const manualWebSearchEnabled = store.webSearchEnabled && searchToggle.available;
 
     const session: AgentSession = {
       id: ulid(),
@@ -93,7 +95,7 @@ export class AgentLoop {
       model: cfg.model,
       messageIds: [],
       tokenBudget: { used: 0, window: cfg.contextLimits.maxContextTokens },
-      webSearchEnabled: store.webSearchEnabled && searchToggle.available,
+      webSearchEnabled: manualWebSearchEnabled,
       totals: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
     };
 
@@ -138,6 +140,7 @@ export class AgentLoop {
     const webProvider = store.appConfig.webAccess.provider;
     const byokReady = webProvider !== 'none' && store.isSearchProviderReady(webProvider);
     const searchToggle = resolveSearchToggle({ provider: cfg.provider, model: cfg.model, byokReady });
+    const manualWebSearchEnabled = store.webSearchEnabled && searchToggle.available;
     const session: AgentSession = {
       ...current,
       scope,
@@ -151,7 +154,7 @@ export class AgentLoop {
       stopReason: undefined,
       lastError: undefined,
       tokenBudget: { used: 0, window: cfg.contextLimits.maxContextTokens },
-      webSearchEnabled: store.webSearchEnabled && searchToggle.available,
+      webSearchEnabled: manualWebSearchEnabled,
     };
 
     store.updateSessionById(session.id, {
@@ -267,8 +270,9 @@ export class AgentLoop {
     const webProvider = store.appConfig.webAccess.provider;
     const byokReady = webProvider !== 'none' && store.isSearchProviderReady(webProvider);
     const searchToggle = resolveSearchToggle({ provider: cfg.provider, model: cfg.model, byokReady });
+    const forceClientWebSearch = shouldForceClientWebSearch(webProvider, byokReady, searchToggle.tier);
     const toolSpecs = [
-      ...filterToolsForRun(this.executor.getToolSpecs(), session.webSearchEnabled, searchToggle),
+      ...filterToolsForRun(this.executor.getToolSpecs(), session.webSearchEnabled, searchToggle, { forceClientWebSearch }),
       REQUEST_USER_CHOICE,
     ];
     // Read-only tools that run outside the Excel runtime (web_search, fetch_url)
@@ -619,4 +623,12 @@ export class AgentLoop {
 
 function msg<T extends Message>(sessionId: string, fields: Omit<T, 'id' | 'sessionId' | 'createdAt'>): T {
   return { id: ulid(), sessionId, createdAt: new Date().toISOString(), ...fields } as unknown as T;
+}
+
+function shouldForceClientWebSearch(
+  webProvider: WebAccessProvider,
+  providerReady: boolean,
+  tier: 'native' | 'byok'
+): boolean {
+  return tier === 'byok' && providerReady && isKeylessSearchProvider(webProvider);
 }

@@ -312,9 +312,8 @@ describe('AgentLoop - web search gating', () => {
     expect(useStore.getState().currentSession?.webSearchEnabled).toBe(false);
   });
 
-  it('removes web tools when the toggle is off on both native and BYOK tiers', async () => {
+  it('exposes client web tools for keyless BYOK providers even when the toggle is off', async () => {
     const byokRequests: LLMRequest[] = [];
-    const nativeRequests: LLMRequest[] = [];
 
     useStore.getState().setAppConfig({ webAccess: { provider: 'wikipedia', readerFallback: false } });
 
@@ -325,6 +324,23 @@ describe('AgentLoop - web search gating', () => {
       noop
     ).start('BYOK off', SCOPE, makeCapturingClient(byokRequests), CFG);
 
+    expect(byokRequests[0].tools.map(t => t.name)).toEqual(['read_range', 'web_search', 'fetch_url', 'request_user_choice']);
+    expect(useStore.getState().currentSession?.webSearchEnabled).toBe(false);
+  });
+
+  it('removes web tools when the toggle is off for native and keyed BYOK tiers', async () => {
+    const keyedRequests: LLMRequest[] = [];
+    const nativeRequests: LLMRequest[] = [];
+
+    useStore.getState().setAppConfig({ webAccess: { provider: 'tavily', readerFallback: false } });
+
+    await new AgentLoop(
+      makeRegistry(),
+      makeExecutor(webTools) as unknown as ToolExecutor,
+      new SnapshotManager(),
+      noop
+    ).start('Keyed BYOK off', SCOPE, makeCapturingClient(keyedRequests), CFG);
+
     await new AgentLoop(
       makeRegistry(),
       makeExecutor(webTools) as unknown as ToolExecutor,
@@ -332,7 +348,7 @@ describe('AgentLoop - web search gating', () => {
       noop
     ).start('Native off', SCOPE, makeCapturingClient(nativeRequests), GENERIC_CFG);
 
-    expect(byokRequests[0].tools.map(t => t.name)).toEqual(['read_range', 'request_user_choice']);
+    expect(keyedRequests[0].tools.map(t => t.name)).toEqual(['read_range', 'request_user_choice']);
     expect(nativeRequests[0].tools.map(t => t.name)).toEqual(['read_range', 'request_user_choice']);
   });
 

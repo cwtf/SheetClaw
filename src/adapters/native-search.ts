@@ -165,7 +165,7 @@ export function getProviderNativeSearchCaption(provider: ProviderKey, model: str
   if (resolution.nativeUnavailableReason) {
     return `Native web search: no for this model - ${resolution.nativeUnavailableReason}`;
   }
-  return 'Native web search: no - uses your search API key (Search tab)';
+  return 'Native web search: no - uses the configured Search tab provider';
 }
 
 export function getUnavailableSearchToggleHint(
@@ -173,9 +173,9 @@ export function getUnavailableSearchToggleHint(
   resolution: SearchTierResolution
 ): string {
   if (resolution.nativeUnavailableReason) {
-    return `${providerLabel} native search is not available for ${resolution.model || 'this model'}. ${resolution.nativeUnavailableReason} Select a supported model or configure a search API key in Settings - Search.`;
+    return `${providerLabel} native search is not available for ${resolution.model || 'this model'}. ${resolution.nativeUnavailableReason} Select a supported model or configure a Search tab provider.`;
   }
-  return `${providerLabel} has no native web search. Configure a search API key in Settings - Search to enable search.`;
+  return `${providerLabel} has no native web search. Configure a Search tab provider to enable search.`;
 }
 
 export function getOpenAINativeSearchPatch(

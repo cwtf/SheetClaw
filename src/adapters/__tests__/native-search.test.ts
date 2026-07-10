@@ -77,10 +77,10 @@ describe('native search copy helpers', () => {
     expect(getSearchSettingsStatusText('Ollama', resolution)).toContain('Ollama has no native web search');
     expect(getByokSectionNote('Ollama', resolution)).toBeUndefined();
     expect(getProviderNativeSearchCaption('ollama', 'llama3.2')).toBe(
-      'Native web search: no - uses your search API key (Search tab)'
+      'Native web search: no - uses the configured Search tab provider'
     );
     expect(getUnavailableSearchToggleHint('Ollama', resolution)).toBe(
-      'Ollama has no native web search. Configure a search API key in Settings - Search to enable search.'
+      'Ollama has no native web search. Configure a Search tab provider to enable search.'
     );
   });
 

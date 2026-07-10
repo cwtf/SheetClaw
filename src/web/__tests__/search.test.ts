@@ -9,6 +9,8 @@ import { googleCseProvider } from '../providers/google-cse';
 import { jinaProvider } from '../providers/jina';
 import { searxngProvider } from '../providers/searxng';
 import { wikipediaProvider } from '../providers/wikipedia';
+import { wikidataProvider } from '../providers/wikidata';
+import { worldBankProvider } from '../providers/worldbank';
 import { ToolExecutor, ToolValidationError } from '../../workbook/executor';
 import { WorkbookRegistry } from '../../workbook/registry';
 import type { ToolCall } from '../../types';
@@ -357,6 +359,94 @@ describe('Wikipedia adapter', () => {
   });
 });
 
+describe('Wikidata adapter', () => {
+  it('parses entity hits keylessly, building Wikidata URLs and optional content summaries', async () => {
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => jsonResponse({
+      search: [
+        {
+          id: 'Q2',
+          title: 'Q2',
+          label: 'Earth',
+          description: 'third planet from the Sun',
+          concepturi: 'https://www.wikidata.org/wiki/Q2',
+          aliases: ['Terra', 'World'],
+        },
+      ],
+    }));
+
+    const results = await wikidataProvider.search('earth', {
+      maxResults: 1,
+      apiKey: '',
+      includeContent: true,
+      signal: new AbortController().signal,
+      fetchImpl,
+    });
+
+    expect(results).toEqual([{
+      title: 'Earth (Q2)',
+      url: 'https://www.wikidata.org/wiki/Q2',
+      snippet: 'Q2 - third planet from the Sun',
+      content: [
+        'Entity: Earth',
+        'ID: Q2',
+        'Description: third planet from the Sun',
+        'Aliases: Terra, World',
+        'Wikidata URL: https://www.wikidata.org/wiki/Q2',
+      ].join('\n'),
+    }]);
+    const [url] = fetchImpl.mock.calls[0];
+    expect(String(url)).toContain('action=wbsearchentities');
+    expect(String(url)).toContain('origin=*');
+    expect(String(url)).toContain('language=en');
+  });
+});
+
+describe('World Bank adapter', () => {
+  it('ranks indicator metadata and returns API-ready data URLs', async () => {
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => jsonResponse([
+      { page: 1, pages: 1, per_page: '20000', total: 3 },
+      [
+        {
+          id: 'SP.POP.TOTL',
+          name: 'Population, total',
+          sourceNote: 'Total population is based on the de facto definition of population.',
+          sourceOrganization: 'World Bank staff estimates',
+          topics: [{ value: 'Health' }],
+        },
+        {
+          id: 'NY.GDP.MKTP.CD',
+          name: 'GDP (current US$)',
+          sourceNote: 'GDP at purchaser prices is the sum of gross value added.',
+          sourceOrganization: 'World Bank national accounts data',
+          topics: [{ value: 'Economic Policy & Debt' }],
+        },
+        {
+          id: 'EN.ATM.CO2E.PC',
+          name: 'CO2 emissions (metric tons per capita)',
+          sourceNote: 'Carbon dioxide emissions are those stemming from fossil fuels.',
+          topics: [{ value: 'Environment' }],
+        },
+      ],
+    ]));
+
+    const results = await worldBankProvider.search('GDP current', {
+      maxResults: 2,
+      apiKey: '',
+      includeContent: true,
+      signal: new AbortController().signal,
+      fetchImpl,
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].title).toBe('GDP (current US$) (NY.GDP.MKTP.CD)');
+    expect(results[0].url).toBe('https://api.worldbank.org/v2/country/all/indicator/NY.GDP.MKTP.CD?format=json&per_page=20000');
+    expect(results[0].snippet).toContain('Economic Policy & Debt');
+    expect(results[0].content).toContain('Data API URL: https://api.worldbank.org/v2/country/all/indicator/NY.GDP.MKTP.CD?format=json&per_page=20000');
+    const [url] = fetchImpl.mock.calls[0];
+    expect(String(url)).toBe('https://api.worldbank.org/v2/indicator?format=json&per_page=20000');
+  });
+});
+
 describe('resolveBaseUrl', () => {
   const FALLBACK = 'https://finance.example';
 
@@ -428,6 +518,8 @@ describe('base URL guard — empty/relative baseUrl falls back to provider endpo
       [tavilyProvider, { apiKey: 'k' }] as const,
       [searxngProvider, { apiKey: '' }] as const,
       [jinaProvider, { apiKey: 'k' }] as const,
+      [wikidataProvider, { apiKey: '' }] as const,
+      [worldBankProvider, { apiKey: '' }] as const,
     ] as const) {
       const fetchImpl = vi.fn(async () => htmlResp.clone());
       await expect(

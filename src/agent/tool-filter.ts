@@ -7,12 +7,14 @@ const WEB_TOOL_NAMES = new Set([WEB_SEARCH_TOOL_NAME, FETCH_URL_TOOL_NAME]);
 export function filterToolsForRun<T extends { name: string }>(
   toolSpecs: T[],
   webSearchEnabled: boolean,
-  search: Pick<SearchToggleResolution, 'tier' | 'available'>
+  search: Pick<SearchToggleResolution, 'tier' | 'available'>,
+  options: { forceClientWebSearch?: boolean } = {}
 ): T[] {
-  if (!webSearchEnabled || !search.available) {
+  const clientWebSearchEnabled = webSearchEnabled || !!options.forceClientWebSearch;
+  if (!clientWebSearchEnabled || (!search.available && !options.forceClientWebSearch)) {
     return toolSpecs.filter(spec => !WEB_TOOL_NAMES.has(spec.name));
   }
-  if (search.tier === 'native') {
+  if (search.tier === 'native' && !options.forceClientWebSearch) {
     return toolSpecs.filter(spec => spec.name !== WEB_SEARCH_TOOL_NAME);
   }
   return toolSpecs;
