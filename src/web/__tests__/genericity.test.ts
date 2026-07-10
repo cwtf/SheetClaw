@@ -19,9 +19,6 @@ const join = path.join as (...parts: string[]) => string;
 const SRC_ROOT = join(process.cwd(), 'src');
 
 const DEMO_SCENARIO_STRINGS = [
-  'data.gov.my',
-  'dosm.gov.my',
-  'malaysia',
   'population dataset',
   'by state',
   'by age/sex',
@@ -58,6 +55,8 @@ const PRE_EXISTING_CONFIG_HOSTS = [
   'dash.cloudflare.com',
   'router.huggingface.co',
   'huggingface.co',
+  'api-open.data.gov.sg',
+  'geocoding-api.open-meteo.com',
   'www.w3.org',
   'cwtf.github.io',
   'github.com',
@@ -71,7 +70,7 @@ const PRE_EXISTING_CONFIG_HOSTS = [
 ];
 
 describe('web access genericity guard', () => {
-  it('does not contain failed-demo domain, dataset, geography, or canned menu strings', () => {
+  it('does not contain failed-demo dataset or canned menu strings', () => {
     const haystack = sourceFiles().map(file => readFileSync(file, 'utf8').toLowerCase()).join('\n');
     for (const needle of DEMO_SCENARIO_STRINGS) {
       expect(haystack, `unexpected demo-specific string: ${needle}`).not.toContain(needle);

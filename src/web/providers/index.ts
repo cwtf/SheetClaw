@@ -5,6 +5,14 @@ import { searxngProvider } from './searxng';
 import { wikipediaProvider } from './wikipedia';
 import { wikidataProvider } from './wikidata';
 import { worldBankProvider } from './worldbank';
+import { ckanProvider } from './ckan';
+import { dataGovMyProvider } from './data-gov-my';
+import { dataGovSgProvider } from './data-gov-sg';
+import { ecbProvider } from './ecb';
+import { eurostatProvider } from './eurostat';
+import { imfProvider } from './imf';
+import { openMeteoProvider } from './open-meteo';
+import { unSdgProvider } from './un-sdg';
 
 export type SearchProviderId =
   | 'tavily'
@@ -13,7 +21,15 @@ export type SearchProviderId =
   | 'searxng'
   | 'wikipedia'
   | 'wikidata'
-  | 'worldbank';
+  | 'worldbank'
+  | 'ckan'
+  | 'data-gov-my'
+  | 'data-gov-sg'
+  | 'ecb'
+  | 'eurostat'
+  | 'imf'
+  | 'open-meteo'
+  | 'un-sdg';
 export type WebAccessProvider = 'none' | SearchProviderId;
 
 export interface SearchResult {
@@ -59,6 +75,14 @@ export const SEARCH_PROVIDERS: Record<SearchProviderId, SearchProviderAdapter> =
   wikipedia: wikipediaProvider,
   wikidata: wikidataProvider,
   worldbank: worldBankProvider,
+  ckan: ckanProvider,
+  'data-gov-my': dataGovMyProvider,
+  'data-gov-sg': dataGovSgProvider,
+  ecb: ecbProvider,
+  eurostat: eurostatProvider,
+  imf: imfProvider,
+  'open-meteo': openMeteoProvider,
+  'un-sdg': unSdgProvider,
 };
 
 export const SEARCH_PROVIDER_IDS = Object.keys(SEARCH_PROVIDERS) as SearchProviderId[];

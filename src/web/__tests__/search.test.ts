@@ -11,6 +11,14 @@ import { searxngProvider } from '../providers/searxng';
 import { wikipediaProvider } from '../providers/wikipedia';
 import { wikidataProvider } from '../providers/wikidata';
 import { worldBankProvider } from '../providers/worldbank';
+import { ckanProvider } from '../providers/ckan';
+import { dataGovMyProvider } from '../providers/data-gov-my';
+import { dataGovSgProvider } from '../providers/data-gov-sg';
+import { ecbProvider } from '../providers/ecb';
+import { eurostatProvider } from '../providers/eurostat';
+import { imfProvider } from '../providers/imf';
+import { openMeteoProvider } from '../providers/open-meteo';
+import { unSdgProvider } from '../providers/un-sdg';
 import { ToolExecutor, ToolValidationError } from '../../workbook/executor';
 import { WorkbookRegistry } from '../../workbook/registry';
 import type { ToolCall } from '../../types';
@@ -447,6 +455,184 @@ describe('World Bank adapter', () => {
   });
 });
 
+describe('CKAN adapter', () => {
+  it('parses public package_search results and prefers resource URLs', async () => {
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => jsonResponse({
+      success: true,
+      result: {
+        results: [{
+          id: 'pkg1',
+          name: 'air-quality',
+          title: 'Air Quality Measurements',
+          notes: 'Hourly readings.',
+          organization: { title: 'Environment Agency' },
+          resources: [{ name: 'CSV', format: 'CSV', url: 'https://public.example/air.csv' }],
+          metadata_modified: '2026-01-02T03:04:05',
+        }],
+      },
+    }));
+
+    const results = await ckanProvider.search('air quality', {
+      maxResults: 1,
+      apiKey: '',
+      includeContent: true,
+      signal: new AbortController().signal,
+      fetchImpl,
+    });
+
+    expect(results[0].url).toBe('https://public.example/air.csv');
+    expect(results[0].snippet).toContain('Environment Agency');
+    expect(results[0].content).toContain('Package URL: https://catalog.data.gov/dataset/air-quality');
+    expect(String(fetchImpl.mock.calls[0][0])).toContain('package_search');
+  });
+});
+
+describe('data.gov.sg adapter', () => {
+  it('ranks listed datasets and returns metadata/download API URLs', async () => {
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => jsonResponse({
+      code: 0,
+      data: {
+        datasets: [
+          { datasetId: 'd_traffic', name: 'Traffic Images', format: 'API', managedByAgencyName: 'LTA' },
+          { datasetId: 'd_rainfall', name: 'Rainfall Across Singapore', format: 'CSV', managedByAgencyName: 'NEA' },
+        ],
+      },
+    }));
+
+    const results = await dataGovSgProvider.search('rainfall', {
+      maxResults: 1,
+      apiKey: '',
+      includeContent: true,
+      signal: new AbortController().signal,
+      fetchImpl,
+    });
+
+    expect(results[0].title).toBe('Rainfall Across Singapore (d_rainfall)');
+    expect(results[0].url).toBe('https://api-production.data.gov.sg/v2/public/api/datasets/d_rainfall/metadata');
+    expect(results[0].content).toContain('Initiate download URL: https://api-open.data.gov.sg/v1/public/api/datasets/d_rainfall/initiate-download');
+  });
+});
+
+describe('data.gov.my adapter', () => {
+  it('builds keyless Malaysia API candidates from the query', async () => {
+    const results = await dataGovMyProvider.search('weather warning earthquake', {
+      maxResults: 3,
+      apiKey: '',
+      includeContent: true,
+      signal: new AbortController().signal,
+      fetchImpl: vi.fn(),
+    });
+
+    expect(results.map(r => r.url)).toContain('https://api.data.gov.my/weather/forecast?limit=100');
+    expect(results.map(r => r.url)).toContain('https://api.data.gov.my/weather/warning/earthquake?limit=100');
+    expect(results[2].url).toBe('https://api.data.gov.my/data-catalogue?id=weather_warning_earthquake&limit=100');
+  });
+});
+
+describe('IMF DataMapper adapter', () => {
+  it('ranks indicators and returns direct DataMapper API URLs', async () => {
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => jsonResponse({
+      indicators: {
+        NGDP_RPCH: { label: 'Real GDP growth', description: 'Annual percent change', unit: 'Percent' },
+        PCPI_IX: { label: 'Consumer price index', description: 'Index' },
+      },
+    }));
+
+    const results = await imfProvider.search('real gdp growth', {
+      maxResults: 1,
+      apiKey: '',
+      includeContent: true,
+      signal: new AbortController().signal,
+      fetchImpl,
+    });
+
+    expect(results[0].title).toBe('Real GDP growth (NGDP_RPCH)');
+    expect(results[0].url).toBe('https://www.imf.org/external/datamapper/api/v1/NGDP_RPCH');
+    expect(results[0].content).toContain('Unit: Percent');
+  });
+});
+
+describe('Eurostat adapter', () => {
+  it('ranks dataflows and returns statistics API URLs', async () => {
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => jsonResponse({
+      dataflows: [
+        { id: 'nama_10_gdp', name: 'GDP and main components', description: 'National accounts' },
+        { id: 'demo_pjan', name: 'Population on 1 January', description: 'Demography' },
+      ],
+    }));
+
+    const results = await eurostatProvider.search('gdp', {
+      maxResults: 1,
+      apiKey: '',
+      includeContent: true,
+      signal: new AbortController().signal,
+      fetchImpl,
+    });
+
+    expect(results[0].url).toBe('https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/nama_10_gdp?lang=en');
+    expect(results[0].content).toContain('Dataset: GDP and main components');
+  });
+});
+
+describe('ECB adapter', () => {
+  it('ranks dataflows and returns ECB data API URLs', async () => {
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => jsonResponse({
+      dataflows: [
+        { id: 'EXR', name: 'Exchange rates', description: 'Euro foreign exchange reference rates' },
+        { id: 'ICP', name: 'Inflation', description: 'Consumer prices' },
+      ],
+    }));
+
+    const results = await ecbProvider.search('exchange rates', {
+      maxResults: 1,
+      apiKey: '',
+      includeContent: true,
+      signal: new AbortController().signal,
+      fetchImpl,
+    });
+
+    expect(results[0].url).toBe('https://data-api.ecb.europa.eu/service/data/EXR?format=jsondata');
+    expect(results[0].content).toContain('Dataflow: Exchange rates');
+  });
+});
+
+describe('Open-Meteo adapter', () => {
+  it('builds forecast URLs when coordinates are present', async () => {
+    const results = await openMeteoProvider.search('1.3521, 103.8198 rainfall', {
+      maxResults: 2,
+      apiKey: '',
+      includeContent: true,
+      signal: new AbortController().signal,
+      fetchImpl: vi.fn(),
+    });
+
+    expect(results[0].url).toContain('latitude=1.3521');
+    expect(results[0].url).toContain('longitude=103.8198');
+    expect(results[0].url).toContain('hourly=temperature_2m');
+  });
+});
+
+describe('UN SDG adapter', () => {
+  it('ranks SDG indicators and returns series lookup URLs', async () => {
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => jsonResponse([
+      { code: '1.1.1', indicator: 'Proportion of population below the international poverty line', goal: '1', target: '1.1' },
+      { code: '7.2.1', indicator: 'Renewable energy share in the total final energy consumption', goal: '7', target: '7.2' },
+    ]));
+
+    const results = await unSdgProvider.search('renewable energy', {
+      maxResults: 1,
+      apiKey: '',
+      includeContent: true,
+      signal: new AbortController().signal,
+      fetchImpl,
+    });
+
+    expect(results[0].title).toContain('Renewable energy share');
+    expect(results[0].url).toBe('https://unstats.un.org/sdgapi/v1/sdg/Series/List?indicator=7.2.1');
+    expect(results[0].content).toContain('Goal: 7');
+  });
+});
+
 describe('resolveBaseUrl', () => {
   const FALLBACK = 'https://finance.example';
 
@@ -520,6 +706,12 @@ describe('base URL guard — empty/relative baseUrl falls back to provider endpo
       [jinaProvider, { apiKey: 'k' }] as const,
       [wikidataProvider, { apiKey: '' }] as const,
       [worldBankProvider, { apiKey: '' }] as const,
+      [ckanProvider, { apiKey: '' }] as const,
+      [dataGovSgProvider, { apiKey: '' }] as const,
+      [ecbProvider, { apiKey: '' }] as const,
+      [eurostatProvider, { apiKey: '' }] as const,
+      [imfProvider, { apiKey: '' }] as const,
+      [unSdgProvider, { apiKey: '' }] as const,
     ] as const) {
       const fetchImpl = vi.fn(async () => htmlResp.clone());
       await expect(

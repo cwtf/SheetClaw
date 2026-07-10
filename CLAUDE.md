@@ -74,7 +74,7 @@ API keys are encrypted at rest with AES-GCM-256 via Web Crypto ([src/auth/secure
 
 ### Web access
 
-Optional. [src/web/](src/web/) contains `fetch.ts` (fetch_url tool with Jina reader proxy fallback) and `search.ts` (web_search routing to Tavily / SearXNG / Google CSE / Jina / Wikipedia / Wikidata / World Bank). Provider selection and BYOK keys are configured in Settings → Web Access.
+Optional. [src/web/](src/web/) contains `fetch.ts` (fetch_url tool with Jina reader proxy fallback) and `search.ts` (web_search routing to Tavily / SearXNG / Google CSE / Jina plus keyless sources such as Wikipedia, Wikidata, World Bank, CKAN, data.gov.my, data.gov.sg, IMF, Eurostat, ECB, Open-Meteo, and UN SDG). Provider selection and BYOK keys are configured in Settings → Web Access.
 
 ## Key constraints
 

@@ -82,7 +82,7 @@ Web tools do **not** live under `src/workbook/tools/` and must not run inside `E
 
 ```ts
 interface SearchProviderAdapter {
-  id: string;                       // 'tavily' | 'google-cse' | 'jina' | 'searxng' | 'wikipedia' | 'wikidata' | 'worldbank'
+  id: string;                       // 'tavily' | 'google-cse' | 'jina' | 'searxng' | keyless source ids
                                     // ('custom' is covered by the per-provider Base URL override)
   label: string;
   requiresKey: boolean;
