@@ -29,7 +29,7 @@ import {
   getSearchSettingsStatusText,
   resolveSearchTier,
 } from '../../adapters/native-search';
-import { getSearchProvider, SEARCH_PROVIDERS, type SearchProviderId, type WebAccessProvider } from '../../web/providers';
+import { getSearchProvider, KEYLESS_BUNDLE_ID, keylessBundleProvider, SEARCH_PROVIDERS, type SearchProviderId, type WebAccessProvider } from '../../web/providers';
 
 type ApiProvider = Exclude<ProviderKey, 'ollama'>;
 export type SettingsTabKey = 'ollama' | 'api' | 'search';
@@ -369,7 +369,7 @@ function SearchSettingsForm({
 }) {
   const selectedProvider = provider === 'none' ? 'tavily' : provider;
   const adapter = getSearchProvider(selectedProvider);
-  const auth = searchAuthStates[selectedProvider];
+  const auth = selectedProvider === KEYLESS_BUNDLE_ID ? undefined : searchAuthStates[selectedProvider];
   const activeSearchTier = resolveSearchTier(activeProvider.provider, activeProvider.model);
   const activeProviderLabel = activeProvider.label || activeProvider.provider;
   const statusText = getSearchSettingsStatusText(activeProviderLabel, activeSearchTier);
@@ -391,7 +391,7 @@ function SearchSettingsForm({
   }, [engineId]);
 
   function saveKey() {
-    if (!apiKey.trim()) return;
+    if (!apiKey.trim() || selectedProvider === KEYLESS_BUNDLE_ID) return;
     onSaveKey(selectedProvider, apiKey);
     onSaveConfig({ provider: selectedProvider });
     setApiKey('');
@@ -445,7 +445,8 @@ function SearchSettingsForm({
           size="small"
         >
           <option value="none">None</option>
-          {Object.values(SEARCH_PROVIDERS).map(p => (
+          <option value={KEYLESS_BUNDLE_ID}>{keylessBundleProvider.label}</option>
+          {Object.values(SEARCH_PROVIDERS).filter(p => p.requiresKey || p.selfHosted).map(p => (
             <option key={p.id} value={p.id}>{p.label}</option>
           ))}
         </Select>
@@ -454,20 +455,24 @@ function SearchSettingsForm({
       {adapter && (
         <>
           <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-            {adapter.requiresKey
-              ? 'Search uses your own provider key. It is off for each new session until you enable it in Chat.'
-              : 'This provider is keyless. Once selected, it is available without the Chat Search toggle; choose None to disable it.'}
+            {adapter.id === KEYLESS_BUNDLE_ID
+              ? 'Bundles every keyless catalogue (Wikipedia, Wikidata, World Bank, IMF, Eurostat, ECB, UN SDG, CKAN, data.gov.my, data.gov.sg, Open-Meteo). The agent routes each search to the best source. Available without the Chat Search toggle; choose None to disable it.'
+              : adapter.requiresKey
+                ? 'Search uses your own provider key. It is off for each new session until you enable it in Chat.'
+                : 'This provider is keyless. Once selected, it is available without the Chat Search toggle; choose None to disable it.'}
           </Caption1>
-          <a href={adapter.signupUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
-            {adapter.requiresKey ? `Get a ${adapter.label} key` : `${adapter.label} setup guide`}
-          </a>
+          {adapter.signupUrl && (
+            <a href={adapter.signupUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
+              {adapter.requiresKey ? `Get a ${adapter.label} key` : `${adapter.label} setup guide`}
+            </a>
+          )}
 
           {adapter.requiresKey && (
             <Field label="API Key">
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 <Input
                   type={showKey ? 'text' : 'password'}
-                  placeholder={keySet ? auth.apiKeyMasked : 'Enter search API key...'}
+                  placeholder={keySet ? auth?.apiKeyMasked : 'Enter search API key...'}
                   value={apiKey}
                   onChange={(_, d) => setApiKey(d.value)}
                   size="small"
@@ -477,7 +482,7 @@ function SearchSettingsForm({
                   {showKey ? 'Hide' : 'Show'}
                 </Button>
                 {keySet && (
-                  <Button size="small" appearance="subtle" onClick={() => onClearKey(selectedProvider)}>Clear</Button>
+                  <Button size="small" appearance="subtle" onClick={() => onClearKey(selectedProvider as SearchProviderId)}>Clear</Button>
                 )}
               </div>
             </Field>
@@ -496,16 +501,18 @@ function SearchSettingsForm({
             </Field>
           )}
 
-          <Field label="Base URL (optional)">
-            <Input
-              value={localBaseUrl}
-              onChange={(_, d) => setLocalBaseUrl(d.value)}
-              onBlur={() => onSaveConfig({ baseUrl: localBaseUrl })}
-              placeholder={adapter.endpoint}
-              size="small"
-              style={{ fontFamily: 'monospace', fontSize: 12 }}
-            />
-          </Field>
+          {adapter.id !== KEYLESS_BUNDLE_ID && (
+            <Field label="Base URL (optional)">
+              <Input
+                value={localBaseUrl}
+                onChange={(_, d) => setLocalBaseUrl(d.value)}
+                onBlur={() => onSaveConfig({ baseUrl: localBaseUrl })}
+                placeholder={adapter.endpoint}
+                size="small"
+                style={{ fontFamily: 'monospace', fontSize: 12 }}
+              />
+            </Field>
+          )}
 
           <Checkbox
             label="Allow reader fallback for fetched URLs"

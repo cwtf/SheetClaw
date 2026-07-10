@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand';
-import type { AuthState, ProviderKey, SearchProviderId } from '../../types';
-import { SEARCH_PROVIDERS as SEARCH_PROVIDER_REGISTRY, SEARCH_PROVIDER_IDS } from '../../web/providers';
+import type { AuthState, ProviderKey, SearchProviderId, WebAccessProvider } from '../../types';
+import { getSearchProvider, SEARCH_PROVIDER_IDS } from '../../web/providers';
 import { storage } from '../storage';
 import { encryptSecret, decryptSecret, isEncryptedSecret } from '../../auth/secureStore';
 
@@ -96,7 +96,7 @@ export interface AuthSlice {
   clearSearchApiKey(provider: SearchProviderId): void;
   loadAuthFromStorage(): Promise<void>;
   isProviderReady(provider: ProviderKey): boolean;
-  isSearchProviderReady(provider: SearchProviderId): boolean;
+  isSearchProviderReady(provider: Exclude<WebAccessProvider, 'none'>): boolean;
 }
 
 const DEFAULT_AUTH_STATE = (provider: string): AuthState => ({
@@ -231,8 +231,9 @@ export const createAuthSlice: StateCreator<AuthSlice> = (set, get) => ({
   },
 
   isSearchProviderReady(provider) {
-    if (SEARCH_PROVIDER_REGISTRY[provider]?.requiresKey === false) return true;
-    const auth = get().searchAuthStates[provider];
+    // Covers the keyless bundle and every individual keyless source.
+    if (getSearchProvider(provider)?.requiresKey === false) return true;
+    const auth = get().searchAuthStates[provider as SearchProviderId];
     return auth?.state === 'authenticated';
   },
 });

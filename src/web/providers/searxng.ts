@@ -14,6 +14,7 @@ export const searxngProvider: SearchProviderAdapter = {
   id: 'searxng',
   label: 'SearXNG (self-hosted)',
   requiresKey: false,
+  selfHosted: true,
   endpoint: 'http://localhost:8080/search',
   signupUrl: 'https://docs.searxng.org/',
 

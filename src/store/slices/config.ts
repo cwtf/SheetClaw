@@ -1,5 +1,6 @@
 import type { StateCreator } from 'zustand';
 import type { ProviderConfig, ProviderKey, WebAccessConfig } from '../../types';
+import { KEYLESS_BUNDLE_ID, keylessSourceIds } from '../../web/providers';
 import { storage } from '../storage';
 
 const STORAGE_KEY = 'xl.config.providers';
@@ -232,10 +233,22 @@ export const createConfigSlice: StateCreator<ConfigSlice> = (set, get) => ({
     const storedProviders = storage.get<Record<ProviderKey, ProviderConfig>>(STORAGE_KEY);
     const storedApp      = storage.get<AppConfig>(APP_KEY);
 
-    const appConfig = storedApp ? { ...DEFAULT_APP_CONFIG, ...storedApp } : get().appConfig;
+    let appConfig = storedApp ? { ...DEFAULT_APP_CONFIG, ...storedApp } : get().appConfig;
     let providers   = storedProviders
       ? { ...DEFAULT_PROVIDERS, ...storedProviders }
       : get().providers;
+
+    // Migration: individual keyless search providers were folded into the
+    // single keyless bundle; the per-provider base URL no longer applies.
+    // Self-hosted providers (SearXNG) stay individually selectable.
+    const webProvider = appConfig.webAccess.provider;
+    if ((keylessSourceIds() as string[]).includes(webProvider)) {
+      appConfig = {
+        ...appConfig,
+        webAccess: { ...appConfig.webAccess, provider: KEYLESS_BUNDLE_ID, baseUrl: undefined },
+      };
+      storage.put(APP_KEY, appConfig);
+    }
 
     // Migration: if the stored active provider somehow has enabled:false, fix it.
     const active = appConfig.activeProvider;

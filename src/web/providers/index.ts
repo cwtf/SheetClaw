@@ -13,6 +13,9 @@ import { eurostatProvider } from './eurostat';
 import { imfProvider } from './imf';
 import { openMeteoProvider } from './open-meteo';
 import { unSdgProvider } from './un-sdg';
+import { keylessBundleProvider, KEYLESS_BUNDLE_ID, type KeylessBundleId } from './keyless';
+
+export { keylessBundleProvider, KEYLESS_BUNDLE_ID, KEYLESS_SOURCE_HINTS, keylessSourceIds, type KeylessBundleId } from './keyless';
 
 export type SearchProviderId =
   | 'tavily'
@@ -30,7 +33,7 @@ export type SearchProviderId =
   | 'imf'
   | 'open-meteo'
   | 'un-sdg';
-export type WebAccessProvider = 'none' | SearchProviderId;
+export type WebAccessProvider = 'none' | SearchProviderId | KeylessBundleId;
 
 export interface SearchResult {
   title: string;
@@ -39,17 +42,21 @@ export interface SearchResult {
   publishedAt?: string;
   /** Extracted page text, present only when includeContent was requested and the provider supports it. */
   content?: string;
+  /** Which keyless source produced this result; set only by the keyless bundle provider. */
+  source?: SearchProviderId;
 }
 
 /** Cap on extracted page text per result so tool output stays bounded. */
 export const MAX_RESULT_CONTENT_CHARS = 4000;
 
 export interface SearchProviderAdapter {
-  id: SearchProviderId;
+  id: SearchProviderId | KeylessBundleId;
   label: string;
   requiresKey: boolean;
   /** Google CSE needs a Programmable Search Engine id (cx) in addition to the API key. */
   requiresEngineId?: boolean;
+  /** Needs a user-supplied instance URL; listed individually and excluded from the keyless bundle. */
+  selfHosted?: boolean;
   endpoint: string;
   signupUrl: string;
   search(
@@ -61,6 +68,8 @@ export interface SearchProviderAdapter {
       engineId?: string;
       /** Also return extracted page text per result. Providers without support ignore this. */
       includeContent?: boolean;
+      /** Keyless source to target; honoured only by the keyless bundle provider. */
+      source?: string;
       signal: AbortSignal;
       fetchImpl?: typeof fetch;
     }
@@ -100,6 +109,7 @@ export const PROVIDER_URL_HOST_ALLOWLIST = Object.values(SEARCH_PROVIDERS).flatM
 
 export function getSearchProvider(id: WebAccessProvider): SearchProviderAdapter | null {
   if (id === 'none') return null;
+  if (id === KEYLESS_BUNDLE_ID) return keylessBundleProvider;
   return SEARCH_PROVIDERS[id] ?? null;
 }
 

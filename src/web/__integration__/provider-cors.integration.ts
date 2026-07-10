@@ -50,13 +50,13 @@ const browserLikeFetch: typeof fetch = async (input, init) => {
 };
 
 describe('keyless provider endpoints allow task-pane CORS', () => {
-  // searxng is keyless but self-hosted (localhost endpoint), so there is no public instance to probe.
+  // Self-hosted providers (searxng) have no public instance to probe.
   const keylessProviders = Object.values(SEARCH_PROVIDERS)
-    .filter(provider => !provider.requiresKey && provider.id !== 'searxng');
+    .filter(provider => !provider.requiresKey && !provider.selfHosted);
 
   for (const provider of keylessProviders) {
     it(`${provider.id} search succeeds under browser-style CORS enforcement`, async () => {
-      const results = await provider.search(PROVIDER_QUERIES[provider.id] ?? 'water', {
+      const results = await provider.search(PROVIDER_QUERIES[provider.id as SearchProviderId] ?? 'water', {
         maxResults: 3,
         apiKey: '',
         signal: new AbortController().signal,
