@@ -21,14 +21,17 @@ interface CkanResponse {
 
 export const ckanProvider: SearchProviderAdapter = {
   id: 'ckan',
-  label: 'CKAN catalog (keyless)',
+  label: 'CKAN catalog (keyless, data.gov.au)',
   requiresKey: false,
-  endpoint: 'https://catalog.data.gov/api/3/action/package_search',
+  // catalog.data.gov retired its CKAN API (404, no CORS); data.gov.au serves
+  // package_search with Access-Control-Allow-Origin: *, so it works from the task pane.
+  endpoint: 'https://data.gov.au/data/api/3/action/package_search',
   signupUrl: 'https://docs.ckan.org/en/2.11/api/',
 
   async search(query, opts): Promise<SearchResult[]> {
     const fetchImpl = opts.fetchImpl ?? fetch;
-    const url = new URL(resolveBaseUrl(opts.baseUrl, this.endpoint));
+    const endpoint = resolveBaseUrl(opts.baseUrl, this.endpoint);
+    const url = new URL(endpoint);
     url.searchParams.set('q', query);
     url.searchParams.set('rows', String(Math.min(opts.maxResults, 10)));
 
@@ -61,19 +64,19 @@ export const ckanProvider: SearchProviderAdapter = {
     }
 
     return (json.result?.results ?? [])
-      .map(pkg => normalizeResult(pkg, opts.includeContent))
+      .map(pkg => normalizeResult(pkg, endpoint, opts.includeContent))
       .filter((result): result is SearchResult => !!result);
   },
 };
 
-function normalizeResult(pkg: CkanPackage, includeContent?: boolean): SearchResult | null {
+function normalizeResult(pkg: CkanPackage, endpoint: string, includeContent?: boolean): SearchResult | null {
   const id = stringValue(pkg.id) || stringValue(pkg.name);
   const title = stringValue(pkg.title) || stringValue(pkg.name) || id;
   if (!id || !title) return null;
 
   const resources = Array.isArray(pkg.resources) ? pkg.resources : [];
   const firstResourceUrl = resources.map(r => stringValue(r.url)).find(Boolean);
-  const packageUrl = `https://catalog.data.gov/dataset/${encodeURIComponent(stringValue(pkg.name) || id)}`;
+  const packageUrl = `${siteRootFromEndpoint(endpoint)}dataset/${encodeURIComponent(stringValue(pkg.name) || id)}`;
   const url = firstResourceUrl || packageUrl;
   const org = stringValue(pkg.organization?.title) || stringValue(pkg.organization?.name);
   const notes = stringValue(pkg.notes);
@@ -93,6 +96,21 @@ function normalizeResult(pkg: CkanPackage, includeContent?: boolean): SearchResu
       firstResourceUrl ? `First resource URL: ${firstResourceUrl}` : '',
     ].filter(Boolean).join('\n')) } : {}),
   };
+}
+
+/**
+ * Derives the CKAN site root from a package_search endpoint so dataset page
+ * links stay correct when a custom base URL points at another CKAN instance,
+ * e.g. "https://data.gov.au/data/api/3/action/package_search" → "https://data.gov.au/data/".
+ */
+function siteRootFromEndpoint(endpoint: string): string {
+  const match = endpoint.match(/^(.*?)api\/(?:\d+\/)?action\/package_search/);
+  if (match) return match[1];
+  try {
+    return `${new URL(endpoint).origin}/`;
+  } catch {
+    return endpoint.endsWith('/') ? endpoint : `${endpoint}/`;
+  }
 }
 
 function stringValue(value: unknown): string {

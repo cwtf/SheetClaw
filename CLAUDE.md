@@ -9,6 +9,7 @@ npm run dev              # Start Vite dev server (HTTPS on localhost:3000)
 npm run build            # tsc + vite build (outputs to dist/)
 npm test                 # Run Vitest test suite (single pass)
 npm run test:watch       # Vitest in watch mode
+npm run test:providers   # Live-network CORS checks for keyless search providers (needs internet)
 npm run sideload         # Register add-in with Excel via office-addin-debugging
 npm run validate-manifest  # Validate manifest.xml
 npm run install-certs    # Install dev HTTPS certs (run once on a new machine)
@@ -82,3 +83,4 @@ Optional. [src/web/](src/web/) contains `fetch.ts` (fetch_url tool with Jina rea
 - `WorkbookRegistry` always holds exactly one workbook on Windows desktop Office (host-only model). Multi-workbook enumeration requires a sidecar that is not implemented.
 - All Office.js calls must be batched inside `Excel.run()` / `ctx.sync()`. The `LoopRunner` type alias (`(fn) => Excel.run(fn)`) is injected for testability — tests substitute a mock runner.
 - Tests use Vitest and run in a Node environment; Office.js globals (`Excel`, `Office`) are not available in tests and must be mocked or kept out of tested modules.
+- Node fetch does not enforce CORS, so unit tests cannot catch a provider endpoint that stops sending `Access-Control-Allow-Origin` (which breaks every fetch from the task pane). `npm run test:providers` probes the live keyless search endpoints through a CORS-enforcing fetch wrapper — run it when adding or changing a keyless provider endpoint.

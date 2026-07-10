@@ -7,13 +7,6 @@ interface EcbDataflow {
   description?: unknown;
 }
 
-interface EcbResponse {
-  dataflows?: EcbDataflow[];
-  data?: {
-    dataflows?: EcbDataflow[];
-  };
-}
-
 export const ecbProvider: SearchProviderAdapter = {
   id: 'ecb',
   label: 'ECB Data Portal (keyless)',
@@ -23,14 +16,14 @@ export const ecbProvider: SearchProviderAdapter = {
 
   async search(query, opts): Promise<SearchResult[]> {
     const fetchImpl = opts.fetchImpl ?? fetch;
-    const url = new URL(resolveBaseUrl(opts.baseUrl, this.endpoint));
-    url.searchParams.set('format', 'jsondata');
+    const url = resolveBaseUrl(opts.baseUrl, this.endpoint);
 
     let response: Response;
     try {
-      response = await fetchImpl(url.toString(), {
+      response = await fetchImpl(url, {
         method: 'GET',
-        headers: { 'Accept': 'application/json' },
+        // The dataflow listing is XML-only; requesting application/json returns HTTP 406.
+        headers: { 'Accept': 'application/vnd.sdmx.structure+xml;version=2.1' },
         signal: opts.signal,
       });
     } catch (e) {
@@ -41,22 +34,49 @@ export const ecbProvider: SearchProviderAdapter = {
     if (!response.ok) throw new ToolNetworkError(`ecb request failed with HTTP ${response.status}`);
     const contentType = response.headers.get('content-type') ?? '';
     if (contentType.includes('text/html')) {
-      throw new ToolNetworkError('ECB: web-access base URL looks misconfigured - response was HTML instead of JSON. Check your search provider settings.');
+      throw new ToolNetworkError('ECB: web-access base URL looks misconfigured - response was HTML instead of SDMX XML. Check your search provider settings.');
     }
 
-    let json: EcbResponse;
-    try {
-      json = await response.json() as EcbResponse;
-    } catch {
-      throw new ToolNetworkError('ecb response was not valid JSON');
+    const xml = await response.text();
+    const dataflows = parseDataflowsXml(xml);
+    if (!dataflows.length) {
+      throw new ToolNetworkError('ecb response did not contain any SDMX dataflows');
     }
 
-    return rankDataflows(json.dataflows ?? json.data?.dataflows ?? [], query)
+    return rankDataflows(dataflows, query)
       .slice(0, opts.maxResults)
       .map(item => toResult(item, opts.includeContent))
       .filter((result): result is SearchResult => !!result);
   },
 };
+
+/**
+ * Extracts dataflow ids and English names from an SDMX-ML 2.1 structure
+ * document without a DOM parser (unit tests run in Node, which has none).
+ * Dataflow elements never nest, so a non-greedy scan per element is safe.
+ */
+function parseDataflowsXml(xml: string): EcbDataflow[] {
+  const flows: EcbDataflow[] = [];
+  const dataflowPattern = /<(?:\w+:)?Dataflow\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?Dataflow>/g;
+  let match: RegExpExecArray | null;
+  while ((match = dataflowPattern.exec(xml))) {
+    const id = /\bid="([^"]*)"/.exec(match[1])?.[1] ?? '';
+    const name =
+      /<(?:\w+:)?Name\b[^>]*xml:lang="en"[^>]*>([^<]*)</.exec(match[2])?.[1] ??
+      /<(?:\w+:)?Name\b[^>]*>([^<]*)</.exec(match[2])?.[1] ?? '';
+    if (id) flows.push({ id, name: decodeXmlEntities(name) });
+  }
+  return flows;
+}
+
+function decodeXmlEntities(value: string): string {
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
 
 function rankDataflows(items: EcbDataflow[], query: string): EcbDataflow[] {
   const terms = tokenize(query);

@@ -1,5 +1,5 @@
 import { ToolNetworkError } from '../../workbook/executor';
-import { MAX_RESULT_CONTENT_CHARS, resolveBaseUrl, type SearchProviderAdapter, type SearchResult } from './index';
+import { MAX_RESULT_CONTENT_CHARS, READER_PROVIDER_ENDPOINT, resolveBaseUrl, type SearchProviderAdapter, type SearchResult } from './index';
 
 type ImfIndicatorEntry = {
   label?: unknown;
@@ -21,37 +21,79 @@ export const imfProvider: SearchProviderAdapter = {
   async search(query, opts): Promise<SearchResult[]> {
     const fetchImpl = opts.fetchImpl ?? fetch;
     const url = resolveBaseUrl(opts.baseUrl, this.endpoint);
-
-    let response: Response;
-    try {
-      response = await fetchImpl(url, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' },
-        signal: opts.signal,
-      });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      throw new ToolNetworkError(`imf request failed: ${message}`);
-    }
-
-    if (!response.ok) throw new ToolNetworkError(`imf request failed with HTTP ${response.status}`);
-    const contentType = response.headers.get('content-type') ?? '';
-    if (contentType.includes('text/html')) {
-      throw new ToolNetworkError('IMF: web-access base URL looks misconfigured - response was HTML instead of JSON. Check your search provider settings.');
-    }
-
-    let json: ImfIndicatorsResponse;
-    try {
-      json = await response.json() as ImfIndicatorsResponse;
-    } catch {
-      throw new ToolNetworkError('imf response was not valid JSON');
-    }
+    const json = await fetchIndicators(url, fetchImpl, opts.signal);
 
     return rankIndicators(normalizeIndicators(json.indicators), query)
       .slice(0, opts.maxResults)
       .map(item => toResult(item, opts.includeContent));
   },
 };
+
+async function fetchIndicators(url: string, fetchImpl: typeof fetch, signal: AbortSignal): Promise<ImfIndicatorsResponse> {
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal,
+    });
+  } catch (e) {
+    if (signal.aborted) throw e;
+    // The DataMapper API sends no Access-Control-Allow-Origin header, so a direct fetch
+    // always fails inside the task pane; retry through the CORS-enabled reader proxy.
+    return fetchIndicatorsViaReader(url, fetchImpl, signal, e);
+  }
+
+  if (!response.ok) throw new ToolNetworkError(`imf request failed with HTTP ${response.status}`);
+  const contentType = response.headers.get('content-type') ?? '';
+  if (contentType.includes('text/html')) {
+    throw new ToolNetworkError('IMF: web-access base URL looks misconfigured - response was HTML instead of JSON. Check your search provider settings.');
+  }
+
+  try {
+    return await response.json() as ImfIndicatorsResponse;
+  } catch {
+    throw new ToolNetworkError('imf response was not valid JSON');
+  }
+}
+
+/** The reader proxy wraps the fetched body in a JSON envelope: { data: { content: "<raw body>" } }. */
+async function fetchIndicatorsViaReader(url: string, fetchImpl: typeof fetch, signal: AbortSignal, directError: unknown): Promise<ImfIndicatorsResponse> {
+  const directMessage = directError instanceof Error ? directError.message : String(directError);
+
+  let response: Response;
+  try {
+    response = await fetchImpl(`${READER_PROVIDER_ENDPOINT}${url}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal,
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    throw new ToolNetworkError(`imf request failed directly (${directMessage}) and via the reader proxy (${message})`);
+  }
+
+  if (!response.ok) {
+    throw new ToolNetworkError(`imf request failed directly (${directMessage}) and the reader proxy returned HTTP ${response.status}`);
+  }
+
+  let envelope: { data?: { content?: unknown } };
+  try {
+    envelope = await response.json() as { data?: { content?: unknown } };
+  } catch {
+    throw new ToolNetworkError('imf reader-proxy response was not valid JSON');
+  }
+
+  const content = envelope?.data?.content;
+  if (typeof content !== 'string') {
+    throw new ToolNetworkError('imf reader-proxy response was missing extracted content');
+  }
+  try {
+    return JSON.parse(content) as ImfIndicatorsResponse;
+  } catch {
+    throw new ToolNetworkError('imf reader-proxy content was not valid JSON');
+  }
+}
 
 interface Indicator {
   id: string;
