@@ -20,6 +20,7 @@ import type { ChoiceSelection } from '../../agent/loop';
 import { getTaskpaneAgentLoop, getTaskpaneWorkbookLayer } from '../workbookLayer';
 
 const STATUS_RUNNING = new Set(['building', 'calling_llm', 'parsing', 'executing_tool']);
+type ToolChainMessage = Extract<Message, { role: 'tool_call' | 'tool' }>;
 
 const STATUS_LABELS: Record<string, string> = {
   building: 'Preparing context',
@@ -290,9 +291,14 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
             onOpenSettings={onOpenSettings}
           />
         )}
-        {visibleMessages.map(m => (
-          <MessageBubble key={m.id} message={m} />
-        ))}
+        {visibleMessages.map((m, index) => {
+          if (isToolChainMessage(m)) {
+            if (index > 0 && isToolChainMessage(visibleMessages[index - 1])) return null;
+            const chain = collectToolChain(visibleMessages, index);
+            return <ToolCallChain key={m.id} messages={chain} />;
+          }
+          return <MessageBubble key={m.id} message={m} />;
+        })}
         {awaitingConfirm && session?.pendingChange && (
           <ConfirmationBlock
             diff={session.pendingChange.diff}
@@ -436,6 +442,20 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
   );
 }
 
+function isToolChainMessage(message: Message): message is ToolChainMessage {
+  return message.role === 'tool_call' || message.role === 'tool';
+}
+
+function collectToolChain(messages: Message[], startIndex: number): ToolChainMessage[] {
+  const chain: ToolChainMessage[] = [];
+  for (let i = startIndex; i < messages.length; i++) {
+    const message = messages[i];
+    if (!isToolChainMessage(message)) break;
+    chain.push(message);
+  }
+  return chain;
+}
+
 function SendIcon() {
   return (
     <span
@@ -449,6 +469,92 @@ function SendIcon() {
         transform: 'translateX(1px)',
       }}
     />
+  );
+}
+
+function ToolCallChain({ messages }: { messages: ToolChainMessage[] }) {
+  const calls = messages.filter((message): message is Extract<Message, { role: 'tool_call' }> => message.role === 'tool_call');
+  const results = messages.filter((message): message is Extract<Message, { role: 'tool' }> => message.role === 'tool');
+  const failed = results.filter(message => !message.result.ok).length;
+  const pending = calls.filter(call => !results.some(result => result.toolCallId === call.toolCall.id)).length;
+  const names = calls.map(call => call.toolCall.name);
+  const summary = names.length
+    ? names.slice(0, 3).join(', ') + (names.length > 3 ? ` +${names.length - 3} more` : '')
+    : 'Tool result';
+
+  return (
+    <details style={{
+      border: `1px solid ${tokens.colorNeutralStroke1}`,
+      borderRadius: 6,
+      background: tokens.colorNeutralBackground1,
+      overflow: 'hidden',
+    }}>
+      <summary style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+        padding: '6px 8px',
+        cursor: 'pointer',
+        color: tokens.colorNeutralForeground2,
+        userSelect: 'none',
+      }}>
+        <Caption1 style={{ fontWeight: 600, overflowWrap: 'anywhere' }}>
+          Tool calls: {summary}
+        </Caption1>
+        <Caption1 style={{
+          color: failed ? tokens.colorPaletteRedForeground1 : tokens.colorNeutralForeground3,
+          flexShrink: 0,
+        }}>
+          {calls.length} call{calls.length === 1 ? '' : 's'}
+          {failed ? `, ${failed} failed` : pending ? `, ${pending} pending` : ''}
+        </Caption1>
+      </summary>
+      <div style={{
+        borderTop: `1px solid ${tokens.colorNeutralStroke1}`,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        padding: 8,
+      }}>
+        {messages.map(message => (
+          <ToolChainRow key={message.id} message={message} />
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function ToolChainRow({ message }: { message: ToolChainMessage }) {
+  if (message.role === 'tool_call') {
+    return (
+      <Caption1 style={{
+        display: 'block',
+        minWidth: 0,
+        maxWidth: '100%',
+        color: tokens.colorNeutralForeground3,
+        fontFamily: 'monospace',
+        whiteSpace: 'pre-wrap',
+        overflowWrap: 'anywhere',
+      }}>
+        Tool: {message.toolCall.name}({JSON.stringify(message.toolCall.arguments).slice(0, 240)})
+      </Caption1>
+    );
+  }
+
+  const ok = message.result.ok;
+  return (
+    <Caption1 style={{
+      display: 'block',
+      minWidth: 0,
+      maxWidth: '100%',
+      color: ok ? tokens.colorPaletteGreenForeground1 : tokens.colorPaletteRedForeground1,
+      fontFamily: 'monospace',
+      whiteSpace: 'pre-wrap',
+      overflowWrap: 'anywhere',
+    }}>
+      {ok ? 'OK' : 'ERR'} {message.toolCallId.slice(0, 12)}... {ok ? JSON.stringify(message.result.data).slice(0, 240) : message.result.error?.message}
+    </Caption1>
   );
 }
 
