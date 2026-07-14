@@ -1,9 +1,9 @@
 # SheetClaw — Complete Design & Implementation Specification
 
-**Version:** derived from source at v0.1.0.1c (July 2026)
+**Version:** derived from the current source at v0.1.0.1c (15 July 2026)
 **Purpose:** This document is a complete, self-contained specification of SheetClaw. An engineer (or LLM) with no access to the original source should be able to rebuild the entire program from this document alone. It specifies the architecture, every data type, every algorithm with its exact constants, the full tool catalogue with parameter schemas, all wire protocols, storage layouts, UI behavior, and build configuration.
 
-> **Intentional design change vs. the v0.1.0.1c source:** the keyless search bundle is **baked into the agent's tool set on every run**, regardless of the Search toggle or Settings. The Search toggle and the Settings → Search provider selection govern **only** internet search that requires an API key (keyed BYOK providers) or is billed to the LLM provider (native search). Sections 5.1, 10, 11, 13, 16, 18, and 22 spec the new behavior; anything in the old source about `forceClientWebSearch` or a user-selectable "keyless bundle" provider is superseded.
+> **Search design note:** the keyless search bundle is **baked into the agent's tool set on every run**, regardless of the Search toggle or Settings. The Search toggle and Settings → Search provider selection govern **only** internet search that requires an API key (keyed BYOK providers) or is billed to the LLM provider (native search).
 
 ---
 
@@ -41,11 +41,11 @@ SheetClaw is an **agentic AI chat assistant embedded in Microsoft Excel** as an 
 Design pillars:
 
 - **BYOK (bring your own key), local-first.** No server component. The task pane talks directly from the browser WebView to the user's chosen LLM provider (Ollama local, OpenAI, Anthropic, or any OpenAI-compatible endpoint). API keys are encrypted at rest in the browser.
-- **Human-in-the-loop safety.** Every *mutating* tool call pauses the agent for user confirmation, showing a cell-level diff computed from a pre-write snapshot. Snapshots also power an Undo button.
+- **Human-in-the-loop safety.** By default, every *mutating* tool call pauses the agent for user confirmation, showing a cell-level diff computed from a pre-write snapshot. Users can persistently switch the approval mode to Accept all edits. Snapshots also power an Undo button.
 - **Provider-agnostic streaming.** All providers are normalized to one streamed event union (`LLMStreamEvent`) so the agent loop is provider-independent.
-- **Cost transparency.** Per-turn token usage is recorded with bundled pricing data; a Usage tab shows totals, per-model breakdowns, and a per-day sparkline, exportable to CSV.
+- **Cost transparency.** Per-turn token usage is recorded with bundled pricing data; the Usage view shows totals, per-model breakdowns, and a per-day sparkline, exportable to CSV.
 
-The UI is a five-tab React SPA (Chat, History, Usage, Settings, About) built with Fluent UI v9, rendered in Excel's sidebar.
+The UI is a five-view React SPA (Chat, History, Usage, Settings, About) built with Fluent UI v9 and rendered in Excel's sidebar. Chat is the home view; the other views are reached from a compact overflow menu.
 
 ---
 
@@ -99,8 +99,9 @@ src/
   pricing/             index.ts (match + cost), pricing.json (bundled table)
   store/               index.ts (combined store), storage.ts (versioned envelope),
                        slices/{config,auth,session,usage}.ts
-  taskpane/            index.tsx (Office.onReady bootstrap), App.tsx (tab shell),
-                       workbookLayer.ts (singleton wiring), components/*.tsx
+  taskpane/            index.tsx (Office.onReady bootstrap), App.tsx/App.css (themed view shell),
+                       selection.ts (submitted Excel selection), workbookLayer.ts
+                       (singleton wiring), components/*.tsx
   types/               index.ts (barrel) + llm, message, provider, session, snapshot,
                        tool, usage, workbook
   usage/               queries.ts (aggregation), export.ts (CSV)
@@ -329,7 +330,10 @@ export type Message = UserMessage | AssistantMessage | ToolCallMessage
                     | ToolResultMessage | ConfirmationMessage | SystemNoticeMessage;
 
 interface BaseMessage { id: string; sessionId: string; createdAt: string; }
-export interface UserMessage extends BaseMessage { role: 'user'; text: string; }
+export interface UserMessage extends BaseMessage {
+  role: 'user'; text: string; selection?: WorkbookSelection;
+}
+export interface WorkbookSelection { sheet: string; address: string; }
 export interface AssistantMessage extends BaseMessage {
   role: 'assistant'; text: string; toolCalls?: ToolCall[];
   usageRef?: string; finishReason?: 'stop' | 'tool_calls' | 'length' | 'error';
@@ -348,6 +352,8 @@ export interface SystemNoticeMessage extends BaseMessage {
   role: 'system_notice'; level: 'info' | 'warn' | 'error'; text: string;
 }
 ```
+
+`selection` is the sheet and local A1 address captured when the message is submitted. It is stored with the message so phrases such as “this cell” remain bound to the original selection even if the user later moves elsewhere in Excel. The UI renders the user text alone; the context builder appends the selection metadata only in the provider-facing message.
 
 `ToolCallMessage`, `ConfirmationMessage`, `SystemNoticeMessage` are **UI-only** — they are skipped when converting the transcript back to LLM wire messages (§12).
 
@@ -442,12 +448,14 @@ State: `providers: Record<ProviderKey, ProviderConfig>` and `appConfig: AppConfi
 ```ts
 export interface AppConfig {
   activeProvider: ProviderKey;
-  autoApproveSession: boolean;      // skip mutating confirmations for the session
+  autoApproveSession: boolean;      // persisted approval mode; skip confirmations while true
   pricingMode: 'bundled' | 'custom';
+  theme: 'system' | 'light' | 'dark';
   webAccess: WebAccessConfig;
 }
 // Defaults: { activeProvider: 'ollama', autoApproveSession: false,
-//             pricingMode: 'bundled', webAccess: { provider: 'none', readerFallback: false } }
+//             pricingMode: 'bundled', theme: 'system',
+//             webAccess: { provider: 'none', readerFallback: false } }
 ```
 
 **Default provider configs** (all `contextLimits` default to `{128000, 100000, 5000}` unless noted; all `enabled: false` except ollama; `authStateRef: 'xl.auth.<key>'`):
@@ -479,6 +487,8 @@ Actions:
   1. If `webAccess.provider` is an individual keyless source id **or** the legacy `'keyless'` bundle id → rewrite to `'none'` and clear `baseUrl` (keyless search is now baked in and no longer a selectable provider; the provider field selects a keyed provider only).
   2. If stored active provider has `enabled: false` → set true.
   3. If generic provider points at OpenRouter with an empty model → restore default model (`openai/gpt-4o-mini`).
+
+Config hydration is a shallow merge over `DEFAULT_APP_CONFIG`, so configurations saved before theme support automatically receive `theme: 'system'`. Theme changes use the ordinary `setAppConfig` persistence path.
 
 ### 5.2 Auth slice
 
@@ -764,8 +774,10 @@ export interface ChoiceSelection { ids: string[]; otherText?: string; }
 export class AgentLoop {
   constructor(registry: WorkbookRegistry, executor: ToolExecutor,
               snapshots: SnapshotManager, runner?: LoopRunner /* default Excel.run */)
-  start(instruction, scope, client: LLMClient, cfg: ProviderConfig): Promise<void>
-  followUp(instruction, scope, client, cfg): Promise<void>
+  start(instruction, scope, client: LLMClient, cfg: ProviderConfig,
+        selection?: WorkbookSelection): Promise<void>
+  followUp(instruction, scope, client, cfg,
+           selection?: WorkbookSelection): Promise<void>
   continueCurrent(client, cfg, additionalIterations = 50): Promise<void>
   stop(): void                                   // aborts + clears pending resolvers
   resolveConfirmation(decision: 'apply' | 'cancel'): void
@@ -778,17 +790,17 @@ A module singleton (`agent/index.ts`): `getAgentLoop(registry, executor, snapsho
 
 ### 11.2 Session start / follow-up
 
-`start(instruction, scope, client, cfg)`:
+`start(instruction, scope, client, cfg, selection?)`:
 1. Create `AbortController`.
 2. Compute web-search wiring. **The keyless bundle is baked in**: `web_search` and `fetch_url` are always part of the run's tool set, with the keyless bundle as the default `web_search` backend. The wiring below only decides whether *keyed/native* search is additionally active:
    - `webProvider = appConfig.webAccess.provider` (keyed provider or `'none'`); `byokReady = webProvider !== 'none' && isSearchProviderReady(webProvider)`.
    - `searchToggle = resolveSearchToggle({provider, model, byokReady})`.
    - `keyedSearchEnabled = store.webSearchEnabled && searchToggle.available` — this becomes `session.webSearchEnabled` and means "keyed BYOK or native search is on for this run"; it does **not** gate the keyless bundle.
 3. Build a fresh `AgentSession` (ULID id, `status:'building'`, `iteration:0`, `maxIterations:50`, `tokenBudget:{used:0, window:cfg.contextLimits.maxContextTokens}`, `webSearchEnabled: keyedSearchEnabled`, zero totals). `setSession`, `resetSessionTotals`.
-4. Append a `UserMessage` with the instruction.
+4. Append a `UserMessage` with the instruction and the submitted selection, when available.
 5. Run `loop(...)`; on throw: aborted → status `'stopped'`; else status `'error'` with `lastError {code:'LoopError'}` and an error `SystemNoticeMessage` ("Run failed: <msg>"). Finally clear the abort controller.
 
-`followUp`: if no current session → `start`. If current status is active → return (ignore). Otherwise reuse the same session id: reset `iteration:0`, `maxIterations:50`, refresh provider/model/scope/webSearchEnabled/tokenBudget, clear pendingChange/pendingChoice/stopReason/lastError; append user message; run the same loop with same error handling.
+`followUp`: if no current session → `start`. If current status is active → return (ignore). Otherwise reuse the same session id: reset `iteration:0`, `maxIterations:50`, refresh provider/model/scope/webSearchEnabled/tokenBudget, clear pendingChange/pendingChoice/stopReason/lastError; append the user message with its submitted selection; run the same loop with the same error handling.
 
 `continueCurrent`: only valid when `status === 'done' && stopReason === 'max_iterations'`. Bumps `maxIterations += 50`, clears stopReason, appends info notice "Continuing for 50 more iterations.", re-enters loop (iteration resumes from `session.iteration`).
 
@@ -873,6 +885,18 @@ Spec: name `request_user_choice`, non-mutating, runtime `'none'`, params `{quest
 
 `src/agent/context-builder.ts`. Constants: `CHARS_PER_TOKEN = 4` (estimator: `ceil(len/4)`), `MAX_TOOL_RESULT_CHARS = 24_000` (sized above fetch_url's 20k text cap + JSON overhead).
 
+During transcript normalization, a user message with selection metadata becomes:
+
+```text
+<visible user text>
+
+<current_selection>
+{"sheet":"<sheet name>","address":"<local A1 address>"}
+</current_selection>
+```
+
+This provider-facing augmentation does not change the visible chat bubble. Each message carries its own immutable-at-submission selection; older messages are never rebound to the workbook's current selection. The workbook manifest is then appended to the first normalized user message as described below.
+
 ```ts
 export class ContextBuilder {
   constructor(registry: WorkbookRegistry, getReaderFallback: () => boolean = () => false) {}
@@ -920,14 +944,15 @@ When you have finished all requested changes and confirmed they succeeded (via t
 
 Rules (numbered 1..n in order):
 1. `**Read before writing.** Always call `read_range` or `get_sheet_context` before writing to any range. Never assume what is in a cell.`
-2. `**Never fabricate addresses.** Only reference addresses you have verified via a tool call.`
-3. `**One logical change per write.** Make small, targeted edits. If multiple ranges need changes, write them one at a time.`
-4. ``**Active scope.** Your active workbook is `<workbookId>`. Only operate on this workbook unless the user explicitly asks you to switch.``
-5. `**Announce before mutating.** Briefly explain what you intend to change before calling a write tool (e.g. "I'll write the totals into column D.").`
-6. `**Do not claim success prematurely.** A write is not done until you receive a successful tool result. The user must confirm before the write is applied.`
-7. `**Use only listed tools.** Do not invent tool names. If a task requires a capability not in your tool list, say so.`
-8. *(web rules — see below, always included)*
-9. `**Never ask option menus in prose.** If you are about to write "Option A/B/C", "Which option would you like?", "choose one", or any similar menu, stop and call `request_user_choice` instead. Put the option title in `label` and the tradeoff/details in `description`.`
+2. `**Never fabricate addresses.** Only reference addresses you have verified via a tool call or received in `current_selection` metadata.`
+3. `**Use the submitted selection.** `current_selection` metadata is the Excel selection captured when that user message was submitted. Resolve phrases such as "this cell", "here", and "the selected range" against that sheet and address. Read the stated range before changing it; do not substitute a later selection.`
+4. `**One logical change per write.** Make small, targeted edits. If multiple ranges need changes, write them one at a time.`
+5. ``**Active scope.** Your active workbook is `<workbookId>`. Only operate on this workbook unless the user explicitly asks you to switch.``
+6. `**Announce before mutating.** Briefly explain what you intend to change before calling a write tool (e.g. "I'll write the totals into column D.").`
+7. `**Do not claim success prematurely.** A write is not done until you receive a successful tool result. The user must confirm before the write is applied.`
+8. `**Use only listed tools.** Do not invent tool names. If a task requires a capability not in your tool list, say so.`
+9. *(web rules — see below, always included)*
+10. `**Never ask option menus in prose.** If you are about to write "Option A/B/C", "Which option would you like?", "choose one", or any similar menu, stop and call `request_user_choice` instead. Put the option title in `label` and the tradeoff/details in `description`.`
 
 Web rules — always five rules. The first is the **search-scope rule**, with a variant per `keyedSearchEnabled`:
 - keyed search OFF (keyless only): `**Search scope.** `web_search` is backed by keyless public catalogues only (Wikipedia, Wikidata, World Bank, IMF, Eurostat, ECB, UN SDG, CKAN, data.gov.my, data.gov.sg, Open-Meteo) — use the `source` parameter to route each query to the best catalogue. General internet search is NOT available in this session; if the task needs it, tell the user they can configure a search provider in Settings → Web Access and enable Search in Chat.`
@@ -1317,22 +1342,26 @@ Inside `Office.onReady`: `loadConfigFromStorage()`, `loadChatHistory()`, `void l
 
 ### 18.2 App shell (`App.tsx`)
 
-`FluentProvider` with `webLightTheme`, full-height flex column: header (🦞 "SheetClaw" + caption "Workbook agent · by Icon Learning & Development"), a small `TabList` (chat/history/usage/settings/about), the active panel, and a persistent `Footer`. `ChatPanel` receives `onOpenSettings(target?: 'search')` which switches to the Settings tab (optionally pre-selecting its Search sub-tab); `HistoryPanel` receives `onOpenChat`.
+`FluentProvider` is a full-height flex column using the persisted `appConfig.theme`. `light` and `dark` select Fluent's `webLightTheme` and `webDarkTheme`; `system` resolves `(prefers-color-scheme: dark)` and listens for changes while the app is mounted. The provider also sets the CSS `color-scheme`, foreground, and background from the resolved theme.
+
+The fixed header contains an optional back-to-Chat button (shown on every non-Chat view), 🦞 "SheetClaw", the product caption, and an overflow navigation menu for History, Usage, Settings, and About. The active non-Chat item has a check mark. Selecting Settings from the menu clears any targeted Settings sub-tab; `ChatPanel.onOpenSettings(target?: 'search')` can still navigate directly to a requested sub-tab. `HistoryPanel` receives `onOpenChat`.
+
+Only one view is mounted at a time. Its key is the current view, so changing views remounts the surface and applies the `tab-surface-enter` animation (180 ms fade/6 px rise); `prefers-reduced-motion: reduce` disables the animation. A persistent `Footer` sits below the active surface.
 
 ### 18.3 ChatPanel — behavior spec
 
-State/selectors: current session, messages, providers, appConfig, auth states, `webSearchEnabled`, `isProviderReady(active)`, `isSearchProviderReady(webAccess.provider)`.
+State/selectors: current session, messages, providers, appConfig, auth states, `webSearchEnabled`, `isProviderReady(active)`, `isSearchProviderReady(webAccess.provider)`, and the currently observed `WorkbookSelection | null`.
 
 Derived:
 - `isRunning` = status ∈ {building, calling_llm, parsing, executing_tool}.
 - `providerReady` = active provider `enabled` && authenticated && model non-empty; otherwise a warning MessageBar with a Settings button ("No provider enabled..." / "Active provider is not authenticated..." / "Select a model in Settings before chatting.").
 - `searchToggle = resolveSearchToggle(...)`; the pill's active state = `webSearchEnabled && searchToggle.available`. (The keyless bundle is always on in the background and has no pill state — the pill strictly reflects keyed/native search.)
 
-Effects: on mount, `registry.refresh()` (errors → error MessageBar); scroll to bottom on new messages; if the toggle is on but search became unavailable, switch it off.
+Effects: on mount, `registry.refresh()` (errors → error MessageBar); scroll to bottom on new messages; if the toggle is on but search became unavailable, switch it off. When Office/Excel is present, read the selected range immediately and subscribe to `Office.EventType.DocumentSelectionChanged`; remove the same handler on unmount. Selection-read failures clear the badge without surfacing an error, and request ids prevent a slower read from replacing a newer selection.
 
-Composer: auto-growing single Textarea (height measured from scrollHeight, clamped 32–200 px; Enter sends, Shift+Enter newline; disabled while running/awaiting). Action row: **New chat** button (📝 — stops loop, clears session + totals + input), **Search pill** (🌐 — governs keyed/native internet search only; keyless catalogue search is always available and needs no pill. Clicking when unavailable — no native tier and no ready keyed provider — shows `getUnavailableSearchToggleHint` (which should note that keyless catalogues remain available) and forces the toggle off; otherwise toggles), **Auto-approve pill** (✓ — toggles `appConfig.autoApproveSession`), and Send (▶) / **Stop** while running.
+Composer: if a selection is available, show a compact badge above the input with the sheet and local A1 address. The input is a single auto-growing Textarea (height measured from scrollHeight, clamped 32–200 px; Enter sends, Shift+Enter inserts a newline; disabled while running/awaiting). Action row: **New chat** icon button (stops the loop and clears session, totals, and input), icon-only **Search** pill (🌐 — governs keyed/native internet search only; keyless catalogue search is always available and needs no pill. Clicking when unavailable — no native tier and no ready keyed provider — shows `getUnavailableSearchToggleHint` and forces the toggle off; otherwise toggles), an icon-only **edit approval mode** menu, and Send (▶) / **Stop** while running. The approval menu is radio-like: **Ask before edits** sets `autoApproveSession:false`; **Accept all edits** sets it to `true`. Its trigger icon and tooltip reflect the selected mode.
 
-Send: build adapter via `createAdapter(cfg, authState)`, `registry.refresh()`, scope = `{workbookId: registry.getActiveId() ?? 'host'}`, then `followUp` if a session exists else `start`.
+Send: build the adapter via `createAdapter(cfg, authState)`, refresh the registry, and re-read the Excel selection at submission time (rather than trusting the event-driven badge). Normalize the selection in `taskpane/selection.ts`: load `address,worksheet/name`, remove the worksheet prefix and all absolute-reference `$` characters, and return `{sheet, address}`. Scope is `{workbookId: registry.getActiveId() ?? 'host'}`; pass the captured selection to `followUp` if a session exists, otherwise to `start`.
 
 Session strip (when a session exists): `"<model> | iter i/max | <in+out> tok"` caption + **Continue** button (only when `status==='done' && stopReason==='max_iterations'`; re-creates the adapter from the *session's* provider and calls `continueCurrent`) + **Undo last write** (calls `snapshots.lastUndoable(session.id)` then `snapshots.undo(id, Excel.run)`).
 
@@ -1357,7 +1386,7 @@ Range selector (Today/7d/30d/All) + **Export CSV**. Empty state "No usage yet �
 
 ### 18.6 SettingsPanel
 
-Three sub-tabs — **Ollama**, **API**, **Search** — with a `*` marker on the tab that owns the active provider.
+Four sub-tabs — **Ollama**, **API**, **Search**, and **Appearance** — with a `*` marker on the provider-owning tab.
 
 **Provider form** (shared): "Set as active"/"Active provider" button; provider signup link; native-search caption (`getProviderNativeSearchCaption`); Base URL input (commit on blur, sets enabled); Model field — a freeform Combobox when a model list is available (with Refresh) else a plain input; model lists come from `knownModels` → static fallback lists per provider → live `listModels()` fetch. Fetch behavior: auto-fetch on mount when possible (ollama and anthropic don't need a key; others need a stored credential); OpenAI results are filtered to chat models (prefixes `gpt-`, `o1`, `o3`, `o4`, `chatgpt-`); when the configured model is empty, choose a per-provider preferred default (falling back to OpenRouter-preferred ids or `ids[0]`), and persist `knownModels`. API-key field (password with Show/Clear; Save key button) for all but ollama; **Sign in with OpenRouter** button when provider is `generic` and base URL origin is `https://openrouter.ai` (runs the §8 flow, then saves the credential and refreshes models). Auth status line (green authenticated / "no auth needed" for ollama / red error). **Test connection** = fetch models and report count. Ollama-specific failure help: if the error carries the browser-access sentinel, show the `OLLAMA_ORIGINS` PowerShell command with a Copy button, else suggest `ollama serve`.
 
@@ -1365,13 +1394,15 @@ Three sub-tabs — **Ollama**, **API**, **Search** — with a `*` marker on the 
 
 **Search tab** (`SearchSettingsForm`): a permanent informational caption stating that the keyless catalogues (Wikipedia, Wikidata, World Bank, IMF, Eurostat, ECB, UN SDG, CKAN, data.gov.my, data.gov.sg, Open-Meteo) are **always available to the agent and need no setup** — this tab only adds keyed internet search. Then: status MessageBar from `getSearchSettingsStatusText` (native tier → success intent); provider Select with options None (= keyless only) / the keyed-or-self-hosted providers (tavily, google-cse, jina, searxng) — **no keyless bundle option**; per-provider caption (keyed: "Search uses your own provider key. It is off for each new session until you enable it in Chat."); signup link; API-key field when `requiresKey`; Engine ID (cx) field when `requiresEngineId`; Base URL override; "Allow reader fallback for fetched URLs" checkbox + explanation; **Save key** (also sets the provider active in webAccess) and **Test key/Test search** (runs a 1-result search for `'spreadsheet public data'` and reports). Clearing a key resets webAccess.provider to `'none'` and turns the chat toggle off (keyless search continues regardless).
 
+**Appearance tab**: a Theme select with **System (default)**, **Light**, and **Dark**. Changes persist immediately through `setAppConfig` and affect the root Fluent theme without a reload.
+
 ### 18.7 Footer
 
 Hidden when no session/totals. Left: `<n> tok` (session in+out, monospace). Right: context pressure `NN% ctx` shown only above 70% (red above 90%), then the model id (ellipsized).
 
 ### 18.8 AboutPanel / HarnessPanel / WorkbookScopeStrip
 
-About: branding, provider list blurb, license (PolyForm Noncommercial 1.0.0), commercial contact, privacy-policy + GitHub links, `Version {__APP_VERSION__}`. HarnessPanel: dev-only canary tester (§9.5) with provider/baseUrl/model/key inputs, live event log, PASS/FAIL bar (not mounted in the shipping tab set). WorkbookScopeStrip: standalone strip showing "<name> - host workbook" with a Refresh button (also not mounted in the current App shell).
+About: branding, provider list blurb, license (PolyForm Noncommercial 1.0.0), commercial contact, privacy-policy + GitHub links, `Version {__APP_VERSION__}`. HarnessPanel: dev-only canary tester (§9.5) with provider/baseUrl/model/key inputs, live event log, PASS/FAIL bar (not mounted in the shipping view set). WorkbookScopeStrip: standalone strip showing "<name> - host workbook" with a Refresh button (also not mounted in the current App shell).
 
 ---
 
@@ -1397,7 +1428,7 @@ Deployment model: static hosting (GitHub Pages) — `npm run build` output publi
 
 ## 20. Testing strategy
 
-- **Unit tests** (Vitest, Node): adapters (SSE parsing incl. fragmented tool-call deltas, error mapping, Ollama lenient parser, native-search patches), agent (loop state machine with mocked executor/runner/store, context-builder compaction, choice parsing), auth (secureStore roundtrip + fallbacks + tamper cases, PKCE/oauth validation), store (auth persistence ordering/migration, session history persistence), pricing (matching + cache-aware cost), web (net URL validation + CORS classification with fake fetch, fetch formatting, search arg validation, keyless bundle interleave/fallback), workbook (executor validation/error mapping, snapshot undo, diff math, chart/pivot handlers against a mock Excel context, tool-registration completeness).
+- **Unit tests** (Vitest, Node): adapters (SSE parsing incl. fragmented tool-call deltas, error mapping, Ollama lenient parser, native-search patches), agent (loop state machine with mocked executor/runner/store, context-builder compaction and selection injection, choice parsing), auth (secureStore roundtrip + fallbacks + tamper cases, PKCE/oauth validation), store (auth persistence ordering/migration, session history persistence, theme defaults and persistence), task pane (selection address normalization and injected Office runner), pricing (matching + cache-aware cost), web (net URL validation + CORS classification with fake fetch, fetch formatting, search arg validation, keyless bundle interleave/fallback), workbook (executor validation/error mapping, snapshot undo, diff math, chart/pivot handlers against a mock Excel context, tool-registration completeness).
 - **Integration** (`src/web/__integration__/provider-cors.integration.ts`, `npm run test:providers`): hits every keyless search endpoint through a CORS-enforcing fetch wrapper to catch providers that drop `Access-Control-Allow-Origin` — Node fetch can't catch this in unit tests. Run when adding/changing a keyless provider.
 - Excel-dependent handlers use an injected mock `Excel.RequestContext`; error-class mapping intentionally checks `e.name` as well as `instanceof` to survive Vitest module duplication.
 
@@ -1435,3 +1466,4 @@ Deployment model: static hosting (GitHub Pages) — `npm run build` output publi
 13. **Auth persistence is a serialized queue** — encryption is async and writes must land in call order.
 14. **All UI-only message roles** (`tool_call`, `confirmation`, `system_notice`) must be excluded from LLM serialization or providers will reject the payload.
 15. **Kimi native search**: the `$web_search` tool call is answered by echoing its raw arguments back; its tool result is sent with `name: '$web_search'` and passes through context-building untruncated as a raw string.
+16. **Selection references are message-scoped**: capture the active sheet/address again at submit time, persist it on that `UserMessage`, and serialize that stored value as `current_selection`. Never resolve an older phrase such as “this cell” against a newer live selection.
