@@ -27,6 +27,7 @@ import { getCurrentWorkbookSelection } from '../selection';
 
 const STATUS_RUNNING = new Set(['building', 'calling_llm', 'parsing', 'executing_tool']);
 type ToolChainMessage = Extract<Message, { role: 'tool_call' | 'tool' }>;
+type ThoughtProcessMessage = Extract<Message, { role: 'assistant' }>;
 type ToolChainCall = {
   id: string;
   name: string;
@@ -36,6 +37,7 @@ type ToolChainCall = {
 };
 type ChatRenderItem =
   | { type: 'message'; message: Message }
+  | { type: 'thought_process'; id: string; messages: ThoughtProcessMessage[] }
   | { type: 'tool_chain'; id: string; calls: ToolChainCall[] };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -415,10 +417,15 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
             onOpenSettings={onOpenSettings}
           />
         )}
-        {chatItems.map(item => item.type === 'message'
-          ? <MessageBubble key={item.message.id} message={item.message} />
-          : <ToolCallChain key={item.id} calls={item.calls} />
-        )}
+        {chatItems.map(item => {
+          if (item.type === 'message') {
+            return <MessageBubble key={item.message.id} message={item.message} />;
+          }
+          if (item.type === 'thought_process') {
+            return <ThoughtProcess key={item.id} messages={item.messages} />;
+          }
+          return <ToolCallChain key={item.id} calls={item.calls} />;
+        })}
         {awaitingConfirm && session?.pendingChange && (
           <ConfirmationBlock
             diff={session.pendingChange.diff}
@@ -599,7 +606,7 @@ function isToolChainMessage(message: Message): message is ToolChainMessage {
   return message.role === 'tool_call' || message.role === 'tool';
 }
 
-function buildChatRenderItems(messages: Message[]): ChatRenderItem[] {
+export function buildChatRenderItems(messages: Message[]): ChatRenderItem[] {
   const items: ChatRenderItem[] = [];
   let segment: Message[] = [];
 
@@ -629,15 +636,23 @@ function buildSegmentRenderItems(segment: Message[]): ChatRenderItem[] {
   }
 
   const items: ChatRenderItem[] = [];
+  const thoughts = segment.filter(isThoughtProcessAssistant);
   const toolCallIds = new Set(calls.map(call => call.id));
   let inserted = false;
   const preferredInsertIndex = findToolChainInsertIndex(segment, toolCallIds);
 
   segment.forEach((message, index) => {
-    if (!isToolChainMessage(message) && !isEmptyToolCallingAssistant(message)) {
+    if (!isToolChainMessage(message) && !isToolCallingAssistant(message)) {
       items.push({ type: 'message', message });
     }
     if (!inserted && index === preferredInsertIndex) {
+      if (thoughts.length) {
+        items.push({
+          type: 'thought_process',
+          id: `thought-process-${thoughts[0].id}`,
+          messages: thoughts,
+        });
+      }
       items.push({ type: 'tool_chain', id: `tool-chain-${calls[0].id}`, calls });
       inserted = true;
     }
@@ -690,8 +705,12 @@ function findToolChainInsertIndex(segment: Message[], toolCallIds: Set<string>):
   return firstToolIndex > 0 ? firstToolIndex - 1 : 0;
 }
 
-function isEmptyToolCallingAssistant(message: Message): boolean {
-  return message.role === 'assistant' && !!message.toolCalls?.length && message.text.trim().length === 0;
+function isToolCallingAssistant(message: Message): message is ThoughtProcessMessage {
+  return message.role === 'assistant' && !!message.toolCalls?.length;
+}
+
+function isThoughtProcessAssistant(message: Message): message is ThoughtProcessMessage {
+  return isToolCallingAssistant(message) && message.text.trim().length > 0;
 }
 
 function SendIcon() {
@@ -707,6 +726,81 @@ function SendIcon() {
         transform: 'translateX(1px)',
       }}
     />
+  );
+}
+
+function ThoughtProcess({ messages }: { messages: ThoughtProcessMessage[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div style={{
+      border: `1px solid ${tokens.colorNeutralStroke1}`,
+      borderRadius: 6,
+      background: tokens.colorNeutralBackground1,
+      overflow: 'hidden',
+      boxShadow: expanded ? `0 0 0 1px ${tokens.colorBrandStroke1}` : undefined,
+    }}>
+      <button
+        type={'button'}
+        aria-expanded={expanded}
+        onClick={() => setExpanded(value => !value)}
+        style={{
+          width: '100%',
+          border: 0,
+          background: 'transparent',
+          color: tokens.colorNeutralForeground2,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          padding: '7px 9px',
+          cursor: 'pointer',
+          textAlign: 'left',
+        }}
+      >
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+          minWidth: 0,
+          fontSize: 12,
+          fontWeight: 600,
+        }}>
+          <span aria-hidden style={{ color: tokens.colorBrandForeground1, width: 10 }}>
+            {expanded ? '-' : '+'}
+          </span>
+          <span>Thought process ({messages.length})</span>
+        </span>
+        <Caption1 style={{ color: tokens.colorNeutralForeground3, flexShrink: 0 }}>
+          {messages.length} {messages.length === 1 ? 'step' : 'steps'}
+        </Caption1>
+      </button>
+      {expanded && (
+        <div style={{
+          borderTop: `1px solid ${tokens.colorNeutralStroke1}`,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+          padding: 8,
+        }}>
+          {messages.map(message => (
+            <div
+              key={message.id}
+              style={{
+                borderRadius: 6,
+                background: tokens.colorNeutralBackground2,
+                color: tokens.colorNeutralForeground1,
+                padding: '7px 9px',
+                minWidth: 0,
+                overflowWrap: 'anywhere',
+              }}
+            >
+              <MarkdownMessage text={message.text} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
