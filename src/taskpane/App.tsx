@@ -9,8 +9,10 @@ import {
   MenuList,
   MenuPopover,
   MenuTrigger,
+  webDarkTheme,
   webLightTheme,
 } from '@fluentui/react-components';
+import { useStore } from '../store/index';
 import ChatPanel from './components/ChatPanel';
 import HistoryPanel from './components/HistoryPanel';
 import UsageDashboard from './components/UsageDashboard';
@@ -50,6 +52,8 @@ function BackIcon() {
 export default function App() {
   const [tab, setTab] = useState<TabId>('chat');
   const [settingsTab, setSettingsTab] = useState<SettingsTabKey | undefined>(undefined);
+  const themePreference = useStore(s => s.appConfig.theme);
+  const theme = themePreference === 'dark' ? webDarkTheme : webLightTheme;
 
   function openMenuTab(nextTab: Exclude<TabId, 'chat'>) {
     if (nextTab === 'settings') setSettingsTab(undefined);
@@ -57,14 +61,24 @@ export default function App() {
   }
 
   return (
-    <FluentProvider theme={webLightTheme} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <FluentProvider
+      theme={theme}
+      style={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        colorScheme: themePreference,
+        color: theme.colorNeutralForeground1,
+        background: theme.colorNeutralBackground1,
+      }}
+    >
       <div style={{
         flexShrink: 0,
         display: 'flex',
         alignItems: 'center',
         gap: 8,
         padding: '8px 12px 6px',
-        borderBottom: `1px solid ${webLightTheme.colorNeutralStroke2}`,
+        borderBottom: `1px solid ${theme.colorNeutralStroke2}`,
       }}>
         {tab !== 'chat' && (
           <Button
@@ -83,7 +97,7 @@ export default function App() {
           <Caption1
             style={{
               display: 'block',
-              color: webLightTheme.colorNeutralForeground3,
+              color: theme.colorNeutralForeground3,
               lineHeight: 1.2,
             }}
           >

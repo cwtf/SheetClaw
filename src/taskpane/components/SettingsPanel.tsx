@@ -32,12 +32,13 @@ import {
 import { getSearchProvider, KEYLESS_BUNDLE_ID, SEARCH_PROVIDERS, type SearchProviderId, type WebAccessProvider } from '../../web/providers';
 
 type ApiProvider = Exclude<ProviderKey, 'ollama'>;
-export type SettingsTabKey = 'ollama' | 'api' | 'search';
+export type SettingsTabKey = 'ollama' | 'api' | 'search' | 'appearance';
 
 const SETTINGS_TABS: { key: SettingsTabKey; label: string }[] = [
   { key: 'ollama', label: 'Ollama' },
   { key: 'api', label: 'API' },
   { key: 'search', label: 'Search' },
+  { key: 'appearance', label: 'Appearance' },
 ];
 
 const API_PROVIDERS: { key: ApiProvider; label: string; freeApi: boolean }[] = [
@@ -264,7 +265,21 @@ export default function SettingsPanel({ initialTab }: { initialTab?: SettingsTab
       </TabList>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
-        {selectedTab === 'search' ? (
+        {selectedTab === 'appearance' ? (
+          <Field
+            label="Theme"
+            hint="Choose how SheetClaw looks. Your preference is saved for future sessions."
+          >
+            <Select
+              value={appConfig.theme}
+              onChange={(_, d) => setAppConfig({ theme: d.value as 'light' | 'dark' })}
+              size="small"
+            >
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </Select>
+          </Field>
+        ) : selectedTab === 'search' ? (
           <SearchSettingsForm
             provider={appConfig.webAccess.provider}
             baseUrl={appConfig.webAccess.baseUrl ?? ''}

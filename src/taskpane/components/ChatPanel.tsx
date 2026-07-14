@@ -103,24 +103,12 @@ function NewChatIcon() {
   );
 }
 
-function ApprovalHandIcon() {
-  return (
-    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 11V6a2 2 0 0 0-4 0v5" />
-      <path d="M14 10V4a2 2 0 1 0-4 0v6" />
-      <path d="M10 10.5V6a2 2 0 1 0-4 0v8" />
-      <path d="M6 14v-2a2 2 0 1 0-4 0v2c0 5.5 4.5 10 10 10h2a8 8 0 0 0 8-8v-5a2 2 0 1 0-4 0" />
-    </svg>
-  );
+function AskBeforeEditsIcon() {
+  return <PillIcon>🛇</PillIcon>;
 }
 
 function AcceptAllEditsIcon() {
-  return (
-    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m4 5 8 7-8 7V5Z" />
-      <path d="m12 5 8 7-8 7V5Z" />
-    </svg>
-  );
+  return <PillIcon>✔</PillIcon>;
 }
 
 export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target?: 'search') => void }) {
@@ -478,7 +466,7 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
                   aria-label="Edit approval mode"
                   title={appConfig.autoApproveSession ? 'Accept all edits' : 'Ask before edits'}
                   style={composerPillStyle(approvalMenuOpen)}
-                  icon={<ApprovalHandIcon />}
+                  icon={appConfig.autoApproveSession ? <AcceptAllEditsIcon /> : <AskBeforeEditsIcon />}
                 />
               </MenuTrigger>
               <MenuPopover style={{ minWidth: 220 }}>
@@ -486,7 +474,7 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
                   <MenuItem
                     role="menuitemradio"
                     aria-checked={!appConfig.autoApproveSession}
-                    icon={<ApprovalHandIcon />}
+                    icon={<AskBeforeEditsIcon />}
                     secondaryContent={!appConfig.autoApproveSession ? <span style={{ color: tokens.colorBrandForeground1 }}>✓</span> : undefined}
                     onClick={() => setAppConfig({ autoApproveSession: false })}
                   >
