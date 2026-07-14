@@ -18,11 +18,12 @@ import {
   tokens,
 } from '@fluentui/react-components';
 import { useStore } from '../../store/index';
-import type { Message, CellDiff } from '../../types';
+import type { Message, CellDiff, WorkbookSelection } from '../../types';
 import { createAdapter } from '../../adapters/index';
 import { getUnavailableSearchToggleHint, resolveSearchToggle } from '../../adapters/native-search';
 import type { ChoiceSelection } from '../../agent/loop';
 import { getTaskpaneAgentLoop, getTaskpaneWorkbookLayer } from '../workbookLayer';
+import { getCurrentWorkbookSelection } from '../selection';
 
 const STATUS_RUNNING = new Set(['building', 'calling_llm', 'parsing', 'executing_tool']);
 type ToolChainMessage = Extract<Message, { role: 'tool_call' | 'tool' }>;
@@ -111,14 +112,99 @@ function AcceptAllEditsIcon() {
   return <PillIcon>✔</PillIcon>;
 }
 
+function SelectionGridIcon() {
+  return (
+    <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+      <rect x="1" y="1" width="4" height="4" rx="0.75" />
+      <rect x="7" y="1" width="4" height="4" rx="0.75" />
+      <rect x="1" y="7" width="4" height="4" rx="0.75" />
+      <rect x="7" y="7" width="4" height="4" rx="0.75" />
+    </svg>
+  );
+}
+
+function SelectionBadge({ selection }: { selection: WorkbookSelection }) {
+  const label = `${selection.sheet} ${selection.address} selected`;
+  return (
+    <div
+      aria-label={label}
+      title={label}
+      style={{
+        alignSelf: 'flex-start',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        maxWidth: '100%',
+        minHeight: 24,
+        padding: '2px 7px',
+        boxSizing: 'border-box',
+        border: `1px solid ${tokens.colorNeutralStroke2}`,
+        borderRadius: 5,
+        background: tokens.colorNeutralBackground3,
+        boxShadow: tokens.shadow2,
+        color: tokens.colorNeutralForeground3,
+        fontSize: 12,
+        lineHeight: '18px',
+      }}
+    >
+      <span style={{ display: 'inline-flex', color: tokens.colorPaletteGreenForeground1, flexShrink: 0 }}>
+        <SelectionGridIcon />
+      </span>
+      <span style={{
+        color: tokens.colorNeutralForeground1,
+        fontWeight: 600,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      }}>
+        {selection.sheet}
+      </span>
+      <span style={{ whiteSpace: 'nowrap' }}>
+        <span style={{ fontFamily: 'monospace' }}>{selection.address}</span> selected
+      </span>
+    </div>
+  );
+}
+
 export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target?: 'search') => void }) {
   const [input, setInput] = useState('');
+  const [currentSelection, setCurrentSelection] = useState<WorkbookSelection | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
   const [searchHint, setSearchHint] = useState<string | null>(null);
   const [approvalMenuOpen, setApprovalMenuOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | HTMLSpanElement>(null);
   const [textareaHeight, setTextareaHeight] = useState(32);
+
+  useEffect(() => {
+    if (typeof Excel === 'undefined') return;
+
+    let disposed = false;
+    let refreshId = 0;
+    const refreshSelection = async () => {
+      const id = ++refreshId;
+      try {
+        const selection = await getCurrentWorkbookSelection();
+        if (!disposed && id === refreshId) setCurrentSelection(selection);
+      } catch {
+        if (!disposed && id === refreshId) setCurrentSelection(null);
+      }
+    };
+    const handleSelectionChanged = () => { void refreshSelection(); };
+
+    void refreshSelection();
+    const document = typeof Office === 'undefined' ? undefined : Office.context?.document;
+    document?.addHandlerAsync(Office.EventType.DocumentSelectionChanged, handleSelectionChanged);
+
+    return () => {
+      disposed = true;
+      refreshId++;
+      document?.removeHandlerAsync(
+        Office.EventType.DocumentSelectionChanged,
+        { handler: handleSelectionChanged },
+      );
+    };
+  }, []);
 
   useEffect(() => {
     const el = textareaRef.current?.tagName === 'TEXTAREA'
@@ -200,13 +286,15 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
 
     try {
       await getTaskpaneWorkbookLayer().registry.refresh();
+      const selection = await getCurrentWorkbookSelection();
+      setCurrentSelection(selection);
       setInitError(null);
       setInput('');
       const scope = { workbookId: getTaskpaneWorkbookLayer().registry.getActiveId() ?? 'host' };
       if (session) {
-        await getTaskpaneAgentLoop().followUp(text, scope, client, cfg);
+        await getTaskpaneAgentLoop().followUp(text, scope, client, cfg, selection);
       } else {
-        await getTaskpaneAgentLoop().start(text, scope, client, cfg);
+        await getTaskpaneAgentLoop().start(text, scope, client, cfg, selection);
       }
     } catch (e) {
       const loopRunning = getTaskpaneAgentLoop().isRunning();
@@ -381,6 +469,7 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
         gap: 4,
         flexShrink: 0,
       }}>
+        {currentSelection && <SelectionBadge selection={currentSelection} />}
         <Textarea
           ref={textareaRef as any}
           style={{ width: '100%', minHeight: 32, height: textareaHeight }}

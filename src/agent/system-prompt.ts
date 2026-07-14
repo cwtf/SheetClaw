@@ -10,7 +10,8 @@ const DEFAULT_WEB: WebPromptState = { keyedSearchEnabled: false, readerFallback:
 export function buildSystemPrompt(workbookId: string, web: WebPromptState = DEFAULT_WEB): string {
   const rules = [
     '**Read before writing.** Always call `read_range` or `get_sheet_context` before writing to any range. Never assume what is in a cell.',
-    '**Never fabricate addresses.** Only reference addresses you have verified via a tool call.',
+    '**Never fabricate addresses.** Only reference addresses you have verified via a tool call or received in `current_selection` metadata.',
+    '**Use the submitted selection.** `current_selection` metadata is the Excel selection captured when that user message was submitted. Resolve phrases such as "this cell", "here", and "the selected range" against that sheet and address. Read the stated range before changing it; do not substitute a later selection.',
     '**One logical change per write.** Make small, targeted edits. If multiple ranges need changes, write them one at a time.',
     `**Active scope.** Your active workbook is \`${workbookId}\`. Only operate on this workbook unless the user explicitly asks you to switch.`,
     '**Announce before mutating.** Briefly explain what you intend to change before calling a write tool (e.g. "I\'ll write the totals into column D.").',

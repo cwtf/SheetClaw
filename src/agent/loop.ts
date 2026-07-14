@@ -7,6 +7,7 @@ import type {
   ProviderConfig,
   Message,
   UserMessage,
+  WorkbookSelection,
   AssistantMessage,
   ToolCallMessage,
   ToolResultMessage,
@@ -72,7 +73,8 @@ export class AgentLoop {
     instruction: string,
     scope: SessionScope,
     client: LLMClient,
-    cfg: ProviderConfig
+    cfg: ProviderConfig,
+    selection?: WorkbookSelection,
   ): Promise<void> {
     const ac = new AbortController();
     this.abortController = ac;
@@ -99,7 +101,7 @@ export class AgentLoop {
     store.setSession(session);
     store.resetSessionTotals(session.id);
 
-    this.append(session.id, msg<UserMessage>(session.id, { role: 'user', text: instruction }));
+    this.append(session.id, msg<UserMessage>(session.id, { role: 'user', text: instruction, selection }));
 
     const ctxBuilder = new ContextBuilder(this.registry, readerFallbackEnabled);
 
@@ -122,11 +124,12 @@ export class AgentLoop {
     instruction: string,
     scope: SessionScope,
     client: LLMClient,
-    cfg: ProviderConfig
+    cfg: ProviderConfig,
+    selection?: WorkbookSelection,
   ): Promise<void> {
     const current = useStore.getState().currentSession;
     if (!current) {
-      await this.start(instruction, scope, client, cfg);
+      await this.start(instruction, scope, client, cfg, selection);
       return;
     }
     if (ACTIVE_STATUSES.has(current.status)) return;
@@ -165,7 +168,7 @@ export class AgentLoop {
       tokenBudget: session.tokenBudget,
       webSearchEnabled: session.webSearchEnabled,
     });
-    this.append(session.id, msg<UserMessage>(session.id, { role: 'user', text: instruction }));
+    this.append(session.id, msg<UserMessage>(session.id, { role: 'user', text: instruction, selection }));
 
     const ctxBuilder = new ContextBuilder(this.registry, readerFallbackEnabled);
     try {

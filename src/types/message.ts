@@ -17,6 +17,12 @@ interface BaseMessage {
 export interface UserMessage extends BaseMessage {
   role: 'user';
   text: string;
+  selection?: WorkbookSelection;
+}
+
+export interface WorkbookSelection {
+  sheet: string;
+  address: string;
 }
 
 export interface AssistantMessage extends BaseMessage {

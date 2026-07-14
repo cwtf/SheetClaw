@@ -66,6 +66,26 @@ describe('ContextBuilder.build', () => {
     expect(req.messages.some(m => m.role === 'user' && (m.content as string).includes('Sum column A'))).toBe(true);
   });
 
+  it('attaches submitted selection metadata without changing the visible message text', () => {
+    const cb = new ContextBuilder(makeRegistry());
+    const msgs: Message[] = [{
+      id: 'u1',
+      sessionId: 's1',
+      createdAt: '',
+      role: 'user',
+      text: 'Format this cell',
+      selection: { sheet: 'Revenue 2026', address: 'C7' },
+    }];
+    const req = cb.build(SESSION, msgs, [], CFG);
+    const user = req.messages.find(m => m.role === 'user');
+
+    expect(user?.content).toContain('Format this cell');
+    expect(user?.content).toContain('<current_selection>');
+    expect(user?.content).toContain('"sheet":"Revenue 2026"');
+    expect(user?.content).toContain('"address":"C7"');
+    expect(req.system).toContain('Use the submitted selection');
+  });
+
   it('includes workbook manifest in first user message', () => {
     const cb = new ContextBuilder(makeRegistry());
     const msgs = makeMessages(['Hello', 'Hi']);

@@ -31,7 +31,12 @@ function toNormalized(messages: Message[]): NormalizedMessage[] {
   for (const m of messages) {
     switch (m.role) {
       case 'user':
-        out.push({ role: 'user', content: m.text });
+        out.push({
+          role: 'user',
+          content: m.selection
+            ? `${m.text}\n\n<current_selection>\n${JSON.stringify(m.selection)}\n</current_selection>`
+            : m.text,
+        });
         break;
       case 'assistant': {
         const toolCalls: NormalizedToolCall[] = (m.toolCalls ?? []).map(tc => ({
