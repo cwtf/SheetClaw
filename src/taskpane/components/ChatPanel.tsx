@@ -8,6 +8,11 @@ import {
   MessageBar,
   MessageBarActions,
   MessageBarBody,
+  Menu,
+  MenuItem,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
   Spinner,
   Textarea,
   tokens,
@@ -89,12 +94,33 @@ function PillIcon({ children }: { children: ReactNode }) {
   );
 }
 
+function ApprovalHandIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 11V6a2 2 0 0 0-4 0v5" />
+      <path d="M14 10V4a2 2 0 1 0-4 0v6" />
+      <path d="M10 10.5V6a2 2 0 1 0-4 0v8" />
+      <path d="M6 14v-2a2 2 0 1 0-4 0v2c0 5.5 4.5 10 10 10h2a8 8 0 0 0 8-8v-5a2 2 0 1 0-4 0" />
+    </svg>
+  );
+}
+
+function AcceptAllEditsIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m4 5 8 7-8 7V5Z" />
+      <path d="m12 5 8 7-8 7V5Z" />
+    </svg>
+  );
+}
+
 export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target?: 'search') => void }) {
   const [input, setInput] = useState('');
   const [initError, setInitError] = useState<string | null>(null);
   const [searchHint, setSearchHint] = useState<string | null>(null);
   const [composerHovered, setComposerHovered] = useState(false);
   const [composerFocused, setComposerFocused] = useState(false);
+  const [approvalMenuOpen, setApprovalMenuOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | HTMLSpanElement>(null);
   const [textareaHeight, setTextareaHeight] = useState(32);
@@ -152,7 +178,7 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
   // The pill strictly reflects keyed BYOK / native search; keyless catalogue
   // search is always on in the background and has no pill state.
   const keyedSearchEnabled = webSearchEnabled && searchToggle.available;
-  const showComposerActions = composerHovered || composerFocused;
+  const showComposerActions = composerHovered || composerFocused || approvalMenuOpen;
 
   useEffect(() => {
     getTaskpaneWorkbookLayer().registry.refresh().catch(e => {
@@ -432,16 +458,43 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
                 setWebSearchEnabled(!webSearchEnabled);
               }}
             />
-            <Button
-              size="small"
-              appearance="secondary"
-              aria-pressed={appConfig.autoApproveSession}
-              aria-label="Auto-approve"
-              title="Auto-approve"
-              style={composerPillStyle(appConfig.autoApproveSession)}
-              icon={<PillIcon>✓</PillIcon>}
-              onClick={() => setAppConfig({ autoApproveSession: !appConfig.autoApproveSession })}
-            />
+            <Menu
+              open={approvalMenuOpen}
+              onOpenChange={(_, data) => setApprovalMenuOpen(data.open)}
+            >
+              <MenuTrigger disableButtonEnhancement>
+                <Button
+                  size="small"
+                  appearance="secondary"
+                  aria-label="Edit approval mode"
+                  title={appConfig.autoApproveSession ? 'Accept all edits' : 'Ask before edits'}
+                  style={composerPillStyle(approvalMenuOpen)}
+                  icon={<ApprovalHandIcon />}
+                />
+              </MenuTrigger>
+              <MenuPopover style={{ minWidth: 220 }}>
+                <MenuList>
+                  <MenuItem
+                    role="menuitemradio"
+                    aria-checked={!appConfig.autoApproveSession}
+                    icon={<ApprovalHandIcon />}
+                    secondaryContent={!appConfig.autoApproveSession ? <span style={{ color: tokens.colorBrandForeground1 }}>✓</span> : undefined}
+                    onClick={() => setAppConfig({ autoApproveSession: false })}
+                  >
+                    Ask before edits
+                  </MenuItem>
+                  <MenuItem
+                    role="menuitemradio"
+                    aria-checked={appConfig.autoApproveSession}
+                    icon={<AcceptAllEditsIcon />}
+                    secondaryContent={appConfig.autoApproveSession ? <span style={{ color: tokens.colorBrandForeground1 }}>✓</span> : undefined}
+                    onClick={() => setAppConfig({ autoApproveSession: true })}
+                  >
+                    Accept all edits
+                  </MenuItem>
+                </MenuList>
+              </MenuPopover>
+            </Menu>
           </div>
           {isRunning
             ? (
