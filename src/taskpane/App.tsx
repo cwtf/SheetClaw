@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Body1Strong,
   Button,
@@ -20,6 +20,7 @@ import SettingsPanel from './components/SettingsPanel';
 import type { SettingsTabKey } from './components/SettingsPanel';
 import AboutPanel from './components/AboutPanel';
 import Footer from './components/Footer';
+import './App.css';
 
 type TabId = 'chat' | 'history' | 'usage' | 'settings' | 'about';
 
@@ -53,7 +54,23 @@ export default function App() {
   const [tab, setTab] = useState<TabId>('chat');
   const [settingsTab, setSettingsTab] = useState<SettingsTabKey | undefined>(undefined);
   const themePreference = useStore(s => s.appConfig.theme);
-  const theme = themePreference === 'dark' ? webDarkTheme : webLightTheme;
+  const [systemUsesDarkTheme, setSystemUsesDarkTheme] = useState(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+  const resolvedTheme = themePreference === 'system'
+    ? (systemUsesDarkTheme ? 'dark' : 'light')
+    : themePreference;
+  const theme = resolvedTheme === 'dark' ? webDarkTheme : webLightTheme;
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return undefined;
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (event: MediaQueryListEvent) => setSystemUsesDarkTheme(event.matches);
+    setSystemUsesDarkTheme(mediaQuery.matches);
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
 
   function openMenuTab(nextTab: Exclude<TabId, 'chat'>) {
     if (nextTab === 'settings') setSettingsTab(undefined);
@@ -67,7 +84,7 @@ export default function App() {
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        colorScheme: themePreference,
+        colorScheme: resolvedTheme,
         color: theme.colorNeutralForeground1,
         background: theme.colorNeutralBackground1,
       }}
@@ -132,12 +149,14 @@ export default function App() {
       </div>
 
       {/* Active surface */}
-      <div style={{ flex: 1, minHeight: 0, height: '100%' }}>
-        {tab === 'chat'     && <ChatPanel onOpenSettings={(target) => { setSettingsTab(target); setTab('settings'); }} />}
-        {tab === 'history'  && <HistoryPanel onOpenChat={() => setTab('chat')} />}
-        {tab === 'usage'    && <UsageDashboard />}
-        {tab === 'settings' && <SettingsPanel initialTab={settingsTab} />}
-        {tab === 'about'    && <AboutPanel />}
+      <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
+        <div key={tab} className='tab-surface'>
+          {tab === 'chat'     && <ChatPanel onOpenSettings={(target) => { setSettingsTab(target); setTab('settings'); }} />}
+          {tab === 'history'  && <HistoryPanel onOpenChat={() => setTab('chat')} />}
+          {tab === 'usage'    && <UsageDashboard />}
+          {tab === 'settings' && <SettingsPanel initialTab={settingsTab} />}
+          {tab === 'about'    && <AboutPanel />}
+        </div>
       </div>
 
       {/* Persistent footer */}

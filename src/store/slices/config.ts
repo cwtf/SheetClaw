@@ -10,7 +10,7 @@ export interface AppConfig {
   activeProvider: ProviderKey;
   autoApproveSession: boolean;
   pricingMode: 'bundled' | 'custom';
-  theme: 'light' | 'dark';
+  theme: 'system' | 'light' | 'dark';
   webAccess: WebAccessConfig;
 }
 
@@ -18,7 +18,7 @@ const DEFAULT_APP_CONFIG: AppConfig = {
   activeProvider: 'ollama',
   autoApproveSession: false,
   pricingMode: 'bundled',
-  theme: 'light',
+  theme: 'system',
   webAccess: { provider: 'none', readerFallback: false },
 };
 

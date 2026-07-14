@@ -18,11 +18,30 @@ function makeLocalStorageStub() {
 beforeEach(() => {
   vi.stubGlobal('localStorage', makeLocalStorageStub());
   useStore.setState(state => ({
-    appConfig: { ...state.appConfig, theme: 'light' },
+    appConfig: { ...state.appConfig, theme: 'system' },
   }));
 });
 
 describe('theme persistence', () => {
+  it('defaults legacy configs to the system theme', () => {
+    localStorage.setItem(
+      'xl.config.app',
+      JSON.stringify({
+        _v: 1,
+        activeProvider: 'ollama',
+        autoApproveSession: false,
+        pricingMode: 'bundled',
+        webAccess: { provider: 'none', readerFallback: false },
+      }),
+    );
+    useStore.setState(state => ({
+      appConfig: { ...state.appConfig, theme: 'dark' },
+    }));
+    useStore.getState().loadConfigFromStorage();
+
+    expect(useStore.getState().appConfig.theme).toBe('system');
+  });
+
   it('saves and restores the dark theme preference', () => {
     useStore.getState().setAppConfig({ theme: 'dark' });
     expect(useStore.getState().appConfig.theme).toBe('dark');

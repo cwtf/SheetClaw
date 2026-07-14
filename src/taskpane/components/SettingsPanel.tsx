@@ -272,9 +272,10 @@ export default function SettingsPanel({ initialTab }: { initialTab?: SettingsTab
           >
             <Select
               value={appConfig.theme}
-              onChange={(_, d) => setAppConfig({ theme: d.value as 'light' | 'dark' })}
+              onChange={(_, d) => setAppConfig({ theme: d.value as 'system' | 'light' | 'dark' })}
               size="small"
             >
+              <option value="system">System (default)</option>
               <option value="light">Light</option>
               <option value="dark">Dark</option>
             </Select>
