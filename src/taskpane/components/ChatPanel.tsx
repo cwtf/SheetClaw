@@ -94,6 +94,15 @@ function PillIcon({ children }: { children: ReactNode }) {
   );
 }
 
+function NewChatIcon() {
+  return (
+    <svg aria-hidden="true" width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.5 3.75H7A3.25 3.25 0 0 0 3.75 7v6A3.25 3.25 0 0 0 7 16.25h6A3.25 3.25 0 0 0 16.25 13V9.5" />
+      <path d="m8.25 11.75.25-2 6.65-6.65a1.2 1.2 0 0 1 1.7 1.7L10.2 11.45l-1.95.3Z" />
+    </svg>
+  );
+}
+
 function ApprovalHandIcon() {
   return (
     <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -437,7 +446,7 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
               aria-label="New chat"
               title="New chat"
             >
-              <PillIcon>📝</PillIcon>
+              <NewChatIcon />
             </Button>
             <Button
               size="small"
