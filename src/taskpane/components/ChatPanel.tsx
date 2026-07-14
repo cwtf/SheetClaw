@@ -738,6 +738,7 @@ function ThoughtProcess({ messages }: { messages: ThoughtProcessMessage[] }) {
       borderRadius: 6,
       background: tokens.colorNeutralBackground1,
       overflow: 'hidden',
+      flexShrink: 0,
       boxShadow: expanded ? `0 0 0 1px ${tokens.colorBrandStroke1}` : undefined,
     }}>
       <button
@@ -815,6 +816,7 @@ function ToolCallChain({ calls }: { calls: ToolChainCall[] }) {
       borderRadius: 6,
       background: tokens.colorNeutralBackground1,
       overflow: 'hidden',
+      flexShrink: 0,
       boxShadow: expanded ? `0 0 0 1px ${tokens.colorBrandStroke1}` : undefined,
     }}>
       <button
