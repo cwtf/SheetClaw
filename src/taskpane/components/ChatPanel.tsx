@@ -115,8 +115,6 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
   const [input, setInput] = useState('');
   const [initError, setInitError] = useState<string | null>(null);
   const [searchHint, setSearchHint] = useState<string | null>(null);
-  const [composerHovered, setComposerHovered] = useState(false);
-  const [composerFocused, setComposerFocused] = useState(false);
   const [approvalMenuOpen, setApprovalMenuOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | HTMLSpanElement>(null);
@@ -175,8 +173,6 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
   // The pill strictly reflects keyed BYOK / native search; keyless catalogue
   // search is always on in the background and has no pill state.
   const keyedSearchEnabled = webSearchEnabled && searchToggle.available;
-  const showComposerActions = composerHovered || composerFocused || approvalMenuOpen;
-
   useEffect(() => {
     getTaskpaneWorkbookLayer().registry.refresh().catch(e => {
       setInitError(e instanceof Error ? e.message : String(e));
@@ -384,16 +380,7 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
         flexDirection: 'column',
         gap: 4,
         flexShrink: 0,
-      }}
-        onMouseEnter={() => setComposerHovered(true)}
-        onMouseLeave={() => setComposerHovered(false)}
-        onFocusCapture={event => setComposerFocused((event.target as HTMLElement).tagName === 'BUTTON')}
-        onBlurCapture={event => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-            setComposerFocused(false);
-          }
-        }}
-      >
+      }}>
         <Textarea
           ref={textareaRef as any}
           style={{ width: '100%', minHeight: 32, height: textareaHeight }}
@@ -421,10 +408,6 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
             alignItems: 'center',
             gap: 6,
             minWidth: 0,
-            opacity: showComposerActions ? 1 : 0,
-            pointerEvents: showComposerActions ? 'auto' : 'none',
-            transform: showComposerActions ? 'translateY(0)' : 'translateY(2px)',
-            transition: 'opacity 120ms ease, transform 120ms ease',
           }}>
             <Button
               size="small"
