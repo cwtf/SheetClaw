@@ -56,10 +56,11 @@ const composerActionStyle = {
 
 function composerPillStyle(active: boolean, unavailable = false): CSSProperties {
   return {
+    width: 36,
     height: 32,
-    minWidth: 0,
+    minWidth: 36,
     borderRadius: 999,
-    padding: '0 12px',
+    padding: 0,
     border: `1px solid ${active ? '#4f7fe8' : tokens.colorNeutralStroke1}`,
     background: active ? '#162033' : tokens.colorNeutralBackground1,
     color: active ? '#6ea2ff' : tokens.colorNeutralForeground2,
@@ -92,6 +93,8 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
   const [input, setInput] = useState('');
   const [initError, setInitError] = useState<string | null>(null);
   const [searchHint, setSearchHint] = useState<string | null>(null);
+  const [composerHovered, setComposerHovered] = useState(false);
+  const [composerFocused, setComposerFocused] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | HTMLSpanElement>(null);
   const [textareaHeight, setTextareaHeight] = useState(32);
@@ -149,6 +152,7 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
   // The pill strictly reflects keyed BYOK / native search; keyless catalogue
   // search is always on in the background and has no pill state.
   const keyedSearchEnabled = webSearchEnabled && searchToggle.available;
+  const showComposerActions = composerHovered || composerFocused;
 
   useEffect(() => {
     getTaskpaneWorkbookLayer().registry.refresh().catch(e => {
@@ -357,7 +361,16 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
         flexDirection: 'column',
         gap: 4,
         flexShrink: 0,
-      }}>
+      }}
+        onMouseEnter={() => setComposerHovered(true)}
+        onMouseLeave={() => setComposerHovered(false)}
+        onFocusCapture={event => setComposerFocused((event.target as HTMLElement).tagName === 'BUTTON')}
+        onBlurCapture={event => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setComposerFocused(false);
+          }
+        }}
+      >
         <Textarea
           ref={textareaRef as any}
           style={{ width: '100%', minHeight: 32, height: textareaHeight }}
@@ -380,7 +393,16 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
           justifyContent: 'space-between',
           gap: 8,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            minWidth: 0,
+            opacity: showComposerActions ? 1 : 0,
+            pointerEvents: showComposerActions ? 'auto' : 'none',
+            transform: showComposerActions ? 'translateY(0)' : 'translateY(2px)',
+            transition: 'opacity 120ms ease, transform 120ms ease',
+          }}>
             <Button
               size="small"
               appearance="secondary"
@@ -396,6 +418,8 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
               appearance="secondary"
               aria-pressed={keyedSearchEnabled}
               aria-disabled={!searchToggle.available}
+              aria-label="Search"
+              title="Search"
               style={composerPillStyle(keyedSearchEnabled, !searchToggle.available)}
               icon={<PillIcon>🌐</PillIcon>}
               onClick={() => {
@@ -407,19 +431,17 @@ export default function ChatPanel({ onOpenSettings }: { onOpenSettings?: (target
                 setSearchHint(null);
                 setWebSearchEnabled(!webSearchEnabled);
               }}
-            >
-              Search
-            </Button>
+            />
             <Button
               size="small"
               appearance="secondary"
               aria-pressed={appConfig.autoApproveSession}
+              aria-label="Auto-approve"
+              title="Auto-approve"
               style={composerPillStyle(appConfig.autoApproveSession)}
               icon={<PillIcon>✓</PillIcon>}
               onClick={() => setAppConfig({ autoApproveSession: !appConfig.autoApproveSession })}
-            >
-              Auto-approve
-            </Button>
+            />
           </div>
           {isRunning
             ? (
