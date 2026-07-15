@@ -50,9 +50,9 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const EXAMPLE_PROMPTS = [
-  'Summarize the active sheet',
-  'Sum B2:B13 into B14',
-  'Make a bar chart from A1:B12',
+  'Find current exchange rates and add a dated table',
+  'Chart Singapore’s latest PM2.5 readings',
+  'List all Malaysian states and their GDP Per Capita',
 ];
 
 const composerActionStyle = {
