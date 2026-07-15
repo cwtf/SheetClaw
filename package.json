@@ -1,6 +1,6 @@
 {
   "name": "sheetclaw",
-  "version": "0.1.0.1c",
+  "version": "0.1.0-beta.1",
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
   "scripts": {
