@@ -13,7 +13,15 @@ import { eurostatProvider } from './eurostat';
 import { imfProvider } from './imf';
 import { openMeteoProvider } from './open-meteo';
 import { unSdgProvider } from './un-sdg';
+import { agentReachProvider } from './agent-reach';
 import { keylessBundleProvider, KEYLESS_BUNDLE_ID, type KeylessBundleId } from './keyless';
+
+export {
+  agentReachProvider,
+  AGENT_REACH_PLATFORMS,
+  splitPlatformPrefix,
+  type AgentReachPlatform,
+} from './agent-reach';
 
 export { keylessBundleProvider, KEYLESS_BUNDLE_ID, KEYLESS_SOURCE_HINTS, keylessSourceIds, type KeylessBundleId } from './keyless';
 
@@ -32,7 +40,8 @@ export type SearchProviderId =
   | 'eurostat'
   | 'imf'
   | 'open-meteo'
-  | 'un-sdg';
+  | 'un-sdg'
+  | 'agent-reach';
 export type WebAccessProvider = 'none' | SearchProviderId | KeylessBundleId;
 
 export interface SearchResult {
@@ -92,6 +101,7 @@ export const SEARCH_PROVIDERS: Record<SearchProviderId, SearchProviderAdapter> =
   imf: imfProvider,
   'open-meteo': openMeteoProvider,
   'un-sdg': unSdgProvider,
+  'agent-reach': agentReachProvider,
 };
 
 export const SEARCH_PROVIDER_IDS = Object.keys(SEARCH_PROVIDERS) as SearchProviderId[];

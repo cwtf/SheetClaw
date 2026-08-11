@@ -3,6 +3,7 @@ import type { ToolHandler } from '../workbook/executor';
 import { ToolNetworkError, ToolValidationError } from '../workbook/executor';
 import { fetchTextWithGuards, type FetchResponse } from './net';
 import { READER_PROVIDER_ENDPOINT } from './providers';
+import { agentReachPlatformFor, readViaAgentReach, type AgentReachReadResult } from './agent-reach';
 
 type FetchFormat = 'auto' | 'text' | 'json' | 'csv';
 type FetchMode = 'preview' | 'full';
@@ -35,6 +36,8 @@ export interface FetchUrlOptions {
   fetchImpl?: typeof fetch;
   readerFallback?: boolean | (() => boolean);
   signal?: AbortSignal;
+  /** Base URL of the Agent-Reach bridge, or a getter; absent disables the backend. */
+  agentReachBaseUrl?: string | (() => string | undefined);
 }
 
 export function createFetchUrlHandler(options: FetchUrlOptions = {}): ToolHandler {
@@ -54,6 +57,25 @@ export async function handleFetchUrlWithOptions(
   const requestedFormat = optionalEnum<FetchFormat>(args.format, 'format', ['auto', 'text', 'json', 'csv']) ?? 'auto';
   const maxChars = clampMaxChars(args.max_chars, mode);
 
+  // Platform hosts go to the bridge first: a direct fetch of an X or Reddit URL
+  // returns a JS shell at best, so trying it first would waste a round trip and
+  // hand the model an empty page. A bridge failure is not fatal - fall through
+  // to the normal path so a stopped bridge degrades instead of breaking fetch.
+  const bridgeBaseUrl = resolveAgentReachBaseUrl(options.agentReachBaseUrl);
+  const platform = bridgeBaseUrl ? agentReachPlatformFor(url) : null;
+  if (bridgeBaseUrl && platform) {
+    try {
+      const read = await readViaAgentReach(url, {
+        baseUrl: bridgeBaseUrl,
+        signal: options.signal,
+        fetchImpl: options.fetchImpl,
+      });
+      return formatAgentReachResult(read, maxChars);
+    } catch {
+      // fall through to direct / reader
+    }
+  }
+
   try {
     const direct = await fetchTextWithGuards(url, {
       fetchImpl: options.fetchImpl,
@@ -70,6 +92,29 @@ export async function handleFetchUrlWithOptions(
     });
     return formatFetchResult(reader, requestedFormat, mode, maxChars, 'reader');
   }
+}
+
+function resolveAgentReachBaseUrl(value: FetchUrlOptions['agentReachBaseUrl']): string | undefined {
+  const resolved = typeof value === 'function' ? value() : value;
+  return resolved?.trim() ? resolved : undefined;
+}
+
+function formatAgentReachResult(read: AgentReachReadResult, maxChars: number): Record<string, unknown> {
+  const capped = cleanTruncate(read.text, maxChars);
+  return {
+    url: read.url,
+    finalUrl: read.url,
+    status: 200,
+    contentType: 'text/plain',
+    source: 'agent-reach',
+    format: 'text' as const,
+    platform: read.platform,
+    tool: read.tool,
+    ...(read.title ? { title: read.title } : {}),
+    returnedChars: capped.text.length,
+    truncated: capped.truncated || read.truncated,
+    text: capped.text,
+  };
 }
 
 function formatFetchResult(

@@ -13,6 +13,7 @@
     "sideload": "office-addin-debugging start manifest.xml desktop --app excel",
     "test": "vitest run",
     "test:watch": "vitest",
+    "agent-reach-bridge": "node tools/agent-reach-bridge/server.mjs",
     "test:providers": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {

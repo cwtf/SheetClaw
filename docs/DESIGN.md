@@ -285,6 +285,10 @@ export interface WebAccessConfig {
                                  // available to the agent as the default search backend.
   baseUrl?: string;              // optional override (self-hosted SearXNG etc.)
   engineId?: string;             // Google CSE cx
+  agentReachBaseUrl?: string;    // local Agent-Reach bridge; blank disables it.
+                                 // Separate from baseUrl because it also backs the
+                                 // fetch_url platform route, which must work whichever
+                                 // search provider is selected.
   readerFallback: boolean;       // route failed fetches through r.jina.ai
 }
 ```
@@ -1292,10 +1296,13 @@ Registry `SEARCH_PROVIDERS` (15 providers):
 | imf | IMF DataMapper (keyless) | no | `https://www.imf.org/external/datamapper/api/v1/indicators` |
 | open-meteo | Open-Meteo (keyless) | no | `https://api.open-meteo.com/v1/forecast` |
 | un-sdg | UN SDG API (keyless) | no | `https://unstats.un.org/sdgapi/v1/sdg/Indicator/List` |
+| agent-reach | Agent-Reach (local bridge) | no (self-hosted) | `http://localhost:8788` |
 
 Each provider module implements `search()` against its public JSON API and normalizes to `SearchResult[]`; each declares a `signupUrl` for the settings link. Keyed providers pass the key per their API (Tavily: JSON body `api_key`; Google CSE: `key` + `cx` query params; Jina: `Authorization: Bearer`). Providers honour `opts.baseUrl` via `resolveBaseUrl(baseUrl, fallback)` which only accepts absolute http(s) URLs.
 
-**User-selectable vs. internal:** only the keyed/self-hosted providers (tavily, google-cse, jina, searxng) appear in Settings → Search. The keyless sources are internal — reachable exclusively through the always-on keyless bundle (§16.5) and its `source` routing parameter.
+**Agent-Reach.** `agent-reach` is self-hosted and keyless, so like `searxng` it is user-selectable but excluded from the keyless bundle — a localhost service that may not be running has no business in the default fan-out. It targets a platform via a `platform:` prefix on the query (`splitPlatformPrefix`) rather than the shared `source` enum, which is validated against catalogue ids only. The same bridge backs `fetch_url`: `agentReachPlatformFor(url)` routes X / Reddit / YouTube / GitHub / Bilibili / XiaoHongShu hosts to `/read` **before** the direct attempt, since a direct fetch of those returns a JS shell at best; a bridge failure falls through to direct → reader rather than failing the tool. Bridge implementation and platform coverage: [tools/agent-reach-bridge/](../tools/agent-reach-bridge/).
+
+**User-selectable vs. internal:** only the keyed/self-hosted providers (tavily, google-cse, jina, searxng, agent-reach) appear in Settings → Search. The keyless sources are internal — reachable exclusively through the always-on keyless bundle (§16.5) and its `source` routing parameter.
 
 Also exported: `READER_PROVIDER_ENDPOINT = 'https://r.jina.ai/'`, host allowlists derived from provider endpoints/signup URLs (used by the CORS integration test), `getSearchProvider(id)` (`'none'`→null, `'keyless'`→bundle), `isKeylessSearchProvider(id)` (adapter exists and `requiresKey === false`).
 

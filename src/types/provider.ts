@@ -62,6 +62,12 @@ export interface WebAccessConfig {
   baseUrl?: string;
   /** Google CSE Programmable Search Engine id (cx); unused by other providers. */
   engineId?: string;
+  /**
+   * Base URL of the local Agent-Reach bridge. Kept separate from `baseUrl`
+   * because it governs the fetch_url platform backend too, which must work
+   * whichever search provider is selected. Absent disables both.
+   */
+  agentReachBaseUrl?: string;
   readerFallback: boolean;
 }
 

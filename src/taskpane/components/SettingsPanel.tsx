@@ -287,6 +287,7 @@ export default function SettingsPanel({ initialTab }: { initialTab?: SettingsTab
             provider={appConfig.webAccess.provider}
             baseUrl={appConfig.webAccess.baseUrl ?? ''}
             engineId={appConfig.webAccess.engineId ?? ''}
+            agentReachBaseUrl={appConfig.webAccess.agentReachBaseUrl ?? ''}
             readerFallback={appConfig.webAccess.readerFallback}
             activeProvider={providers[appConfig.activeProvider]}
             searchAuthStates={searchAuthStates}
@@ -368,6 +369,7 @@ function SearchSettingsForm({
   provider,
   baseUrl,
   engineId,
+  agentReachBaseUrl,
   readerFallback,
   activeProvider,
   searchAuthStates,
@@ -378,10 +380,11 @@ function SearchSettingsForm({
   provider: WebAccessProvider;
   baseUrl: string;
   engineId: string;
+  agentReachBaseUrl: string;
   readerFallback: boolean;
   activeProvider: ProviderConfig;
   searchAuthStates: Record<SearchProviderId, AuthState>;
-  onSaveConfig: (patch: { provider?: WebAccessProvider; baseUrl?: string; engineId?: string; readerFallback?: boolean }) => void;
+  onSaveConfig: (patch: { provider?: WebAccessProvider; baseUrl?: string; engineId?: string; agentReachBaseUrl?: string; readerFallback?: boolean }) => void;
   onSaveKey: (provider: SearchProviderId, key: string) => void;
   onClearKey: (provider: SearchProviderId) => void;
 }) {
@@ -399,6 +402,8 @@ function SearchSettingsForm({
   const [showKey, setShowKey] = useState(false);
   const [localBaseUrl, setLocalBaseUrl] = useState(baseUrl);
   const [localEngineId, setLocalEngineId] = useState(engineId);
+  const [localBridgeUrl, setLocalBridgeUrl] = useState(agentReachBaseUrl);
+  const isAgentReach = selectedProvider === 'agent-reach';
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
   const [testMsg, setTestMsg] = useState('');
   const keySet = !!getAuthCredential(auth);
@@ -410,6 +415,10 @@ function SearchSettingsForm({
   useEffect(() => {
     setLocalEngineId(engineId);
   }, [engineId]);
+
+  useEffect(() => {
+    setLocalBridgeUrl(agentReachBaseUrl);
+  }, [agentReachBaseUrl]);
 
   function saveKey() {
     if (!apiKey.trim()) return;
@@ -427,7 +436,7 @@ function SearchSettingsForm({
       const results = await adapter.search('spreadsheet public data', {
         maxResults: 1,
         apiKey: key,
-        baseUrl: localBaseUrl || undefined,
+        baseUrl: (isAgentReach ? localBridgeUrl : localBaseUrl) || undefined,
         engineId: localEngineId || undefined,
         signal: new AbortController().signal,
       });
@@ -525,16 +534,20 @@ function SearchSettingsForm({
             </Field>
           )}
 
-          <Field label="Base URL (optional)">
-            <Input
-              value={localBaseUrl}
-              onChange={(_, d) => setLocalBaseUrl(d.value)}
-              onBlur={() => onSaveConfig({ baseUrl: localBaseUrl })}
-              placeholder={adapter.endpoint}
-              size="small"
-              style={{ fontFamily: 'monospace', fontSize: 12 }}
-            />
-          </Field>
+          {/* Agent-Reach reads the dedicated bridge field below instead, so it
+              does not get a second, conflicting URL box here. */}
+          {!isAgentReach && (
+            <Field label="Base URL (optional)">
+              <Input
+                value={localBaseUrl}
+                onChange={(_, d) => setLocalBaseUrl(d.value)}
+                onBlur={() => onSaveConfig({ baseUrl: localBaseUrl })}
+                placeholder={adapter.endpoint}
+                size="small"
+                style={{ fontFamily: 'monospace', fontSize: 12 }}
+              />
+            </Field>
+          )}
 
           <Checkbox
             label="Allow reader fallback for fetched URLs"
@@ -566,6 +579,28 @@ function SearchSettingsForm({
           )}
         </>
       )}
+
+      {/* Outside the adapter block on purpose: the bridge also backs fetch_url
+          for platform URLs, so it stays configurable whichever provider is set. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 6 }}>
+        <Label size="small">Agent-Reach bridge</Label>
+        <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
+          Optional. A local bridge that reads X, Reddit, YouTube, GitHub and Bilibili URLs
+          through the CLI readers Agent-Reach installs - pages a direct fetch cannot see.
+          Leave blank to disable. Start it with <code>npm run agent-reach-bridge</code>.
+        </Caption1>
+      </div>
+
+      <Field label="Bridge URL (optional)">
+        <Input
+          value={localBridgeUrl}
+          onChange={(_, d) => setLocalBridgeUrl(d.value)}
+          onBlur={() => onSaveConfig({ agentReachBaseUrl: localBridgeUrl })}
+          placeholder="http://localhost:8788"
+          size="small"
+          style={{ fontFamily: 'monospace', fontSize: 12 }}
+        />
+      </Field>
     </div>
   );
 }

@@ -14,6 +14,7 @@ export function getTaskpaneWorkbookLayer(): ReturnType<typeof createWorkbookLaye
     layer = createWorkbookLayer();
     layer.executor.register(FETCH_URL, createFetchUrlHandler({
       readerFallback: () => useStore.getState().appConfig.webAccess.readerFallback,
+      agentReachBaseUrl: () => useStore.getState().appConfig.webAccess.agentReachBaseUrl,
     }));
     layer.executor.register(WEB_SEARCH, createWebSearchHandler({
       // Effective backend: the configured keyed provider only when the Search
@@ -27,7 +28,12 @@ export function getTaskpaneWorkbookLayer(): ReturnType<typeof createWorkbookLaye
       },
       getApiKey: (provider: SearchProviderId) =>
         getAuthCredential(useStore.getState().searchAuthStates[provider]),
-      getBaseUrl: () => useStore.getState().appConfig.webAccess.baseUrl,
+      // The bridge URL is configured once and drives both the search provider
+      // and the fetch_url backend, so agent-reach reads its own field.
+      getBaseUrl: (provider: SearchProviderId) => {
+        const web = useStore.getState().appConfig.webAccess;
+        return provider === 'agent-reach' ? (web.agentReachBaseUrl ?? web.baseUrl) : web.baseUrl;
+      },
       getEngineId: () => useStore.getState().appConfig.webAccess.engineId,
     }));
   }

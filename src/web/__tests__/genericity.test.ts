@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { PROVIDER_URL_HOST_ALLOWLIST } from '../providers';
+import { PLATFORM_HOSTS } from '../agent-reach';
+
+/**
+ * Agent-Reach routes named platforms by design, so its hosts are a declared
+ * surface like PROVIDER_URL_HOST_ALLOWLIST - not the stray hardcoded sites this
+ * guard exists to catch. Both spellings, since the router strips `www.`.
+ */
+const AGENT_REACH_HOSTS = Object.keys(PLATFORM_HOSTS).flatMap(host => [host, `www.${host}`]);
 
 declare const process: { cwd(): string };
 declare function require(id: string): {
@@ -78,7 +86,7 @@ describe('web access genericity guard', () => {
   });
 
   it('does not add undeclared hostnames to source string literals', () => {
-    const allowed = new Set([...PROVIDER_URL_HOST_ALLOWLIST, ...PRE_EXISTING_CONFIG_HOSTS]);
+    const allowed = new Set([...PROVIDER_URL_HOST_ALLOWLIST, ...PRE_EXISTING_CONFIG_HOSTS, ...AGENT_REACH_HOSTS]);
     const hits: string[] = [];
     for (const file of sourceFiles()) {
       const text = readFileSync(file, 'utf8');

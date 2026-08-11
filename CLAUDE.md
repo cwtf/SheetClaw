@@ -10,6 +10,7 @@ npm run build            # tsc + vite build (outputs to dist/)
 npm test                 # Run Vitest test suite (single pass)
 npm run test:watch       # Vitest in watch mode
 npm run test:providers   # Live-network CORS checks for keyless search providers (needs internet)
+npm run agent-reach-bridge # Local HTTP bridge for Agent-Reach platform reads (see tools/agent-reach-bridge/)
 npm run sideload         # Register add-in with Excel via office-addin-debugging
 npm run validate-manifest  # Validate manifest.xml
 npm run install-certs    # Install dev HTTPS certs (run once on a new machine)
@@ -76,6 +77,8 @@ API keys are encrypted at rest with AES-GCM-256 via Web Crypto ([src/auth/secure
 ### Web access
 
 Optional. [src/web/](src/web/) contains `fetch.ts` (fetch_url tool with Jina reader proxy fallback) and `search.ts` (web_search routing to Tavily / SearXNG / Google CSE / Jina plus keyless sources such as Wikipedia, Wikidata, World Bank, CKAN, data.gov.my, data.gov.sg, IMF, Eurostat, ECB, Open-Meteo, and UN SDG). Provider selection and BYOK keys are configured in Settings → Web Access.
+
+**Agent-Reach.** Platform URLs (X, Reddit, YouTube, GitHub, Bilibili, XiaoHongShu) are unreadable by a cross-origin `fetch`, so they route through a local bridge instead: [tools/agent-reach-bridge/server.mjs](tools/agent-reach-bridge/server.mjs) implements Agent-Reach's platform routing table over HTTP and shells out to the CLI readers it provisions. Agent-Reach has no `read`/`search` command of its own — it is an installer plus a `SKILL.md` routing table — so the bridge is a peer of that skill file, not a wrapper around its CLI. Client side: [src/web/agent-reach.ts](src/web/agent-reach.ts) is the `fetch_url` backend and [src/web/providers/agent-reach.ts](src/web/providers/agent-reach.ts) is the search provider. Configured by one field, `webAccess.agentReachBaseUrl`; blank disables both. Keep the host list in `src/web/agent-reach.ts` in sync with `PLATFORMS` in `server.mjs`.
 
 ## Key constraints
 
