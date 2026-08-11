@@ -19,13 +19,23 @@ Built with Office.js, React, TypeScript, Vite, Fluent UI, and Zustand.
 
 ### Automated installer (recommended)
 
-Download and run the install script. No admin rights required.
+Close Excel, then run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
-The script downloads the manifest from GitHub Pages, places it in `%LOCALAPPDATA%\SheetClaw\`, and registers it as a trusted catalog in Excel's registry. After it completes, open Excel and enable SheetClaw once via **Insert → Add-ins → My Add-ins → Shared Folder**.
+The script downloads the manifest from GitHub Pages into `%LOCALAPPDATA%\SheetClaw\`, shares that folder read-only over SMB, and registers the share as a trusted catalog in Excel's registry. When it finishes, open Excel and enable SheetClaw once via **Insert → Add-ins → My Add-ins → Shared Folder**.
+
+**It will prompt for administrator rights.** Excel's trusted catalog accepts a network path (`\\YourPC\SheetClaw`) only — a plain local path is accepted by the registry but silently produces an empty Shared Folder tab — and creating the share requires elevation. The script relaunches itself; approve the UAC prompt.
+
+Working from a clone, or Pages hasn't deployed yet? Skip the download:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1 -LocalManifest .\manifest.xml
+```
+
+If you would rather share the folder yourself, do that first and pass `-SkipShare`.
 
 ### Manual: Shared Folder Catalog
 
