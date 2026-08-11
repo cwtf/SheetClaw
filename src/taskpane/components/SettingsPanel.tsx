@@ -18,8 +18,9 @@ import {
   type SelectTabData,
 } from '@fluentui/react-components';
 import { useStore } from '../../store/index';
-import { createAdapter } from '../../adapters/index';
+import { createAdapter, isKeyOptionalProvider } from '../../adapters/index';
 import { getOllamaBrowserAccessCommand, isOllamaBrowserAccessError } from '../../adapters/ollama';
+import { diagnoseOmniRouteFailure } from '../../adapters/omniroute';
 import type { AuthState, ProviderConfig, ProviderKey } from '../../types';
 import { getAuthCredential } from '../../auth/credentials';
 import { signInWithOpenRouter } from '../../auth/oauthFlow';
@@ -48,6 +49,7 @@ const API_PROVIDERS: { key: ApiProvider; label: string; freeApi: boolean }[] = [
   { key: 'cloudflare',  label: 'Cloudflare Workers AI',     freeApi: true  },
   { key: 'huggingface', label: 'Hugging Face',              freeApi: true  },
   { key: 'generic',     label: 'OpenRouter / Compatible API', freeApi: true },
+  { key: 'omniroute',   label: 'OmniRoute (local gateway)', freeApi: true  },
   { key: 'openai',      label: 'OpenAI',                    freeApi: false },
   { key: 'anthropic',   label: 'Anthropic',                 freeApi: false },
   { key: 'deepseek',    label: 'DeepSeek',                  freeApi: false },
@@ -589,15 +591,20 @@ function ProviderForm({
   const [testMsg, setTestMsg] = useState('');
   const [oauthStatus, setOAuthStatus] = useState<'idle' | 'authenticating' | 'ok' | 'error'>('idle');
   const [copiedOllamaCmd, setCopiedOllamaCmd] = useState(false);
+  const [gatewayHint, setGatewayHint] = useState('');
 
+  // OmniRoute sits between the two existing cases: its gateway key is optional,
+  // so the field is offered (needsKey) but nothing is gated on it (keyRequired).
   const needsKey = providerKey !== 'ollama';
+  const keyRequired = needsKey && !isKeyOptionalProvider(providerKey);
+  const isOmniRoute = providerKey === 'omniroute';
   const storedCredential = getAuthCredential(auth);
   const keySet = !!storedCredential;
   const supportsOpenRouterOAuth = providerKey === 'generic' && isOpenRouterBaseUrl(baseUrl);
   const signupLink = API_KEY_SIGNUP_LINKS[providerKey];
 
   useEffect(() => {
-    const canLoad = providerKey === 'ollama'
+    const canLoad = isKeyOptionalProvider(providerKey)
       || providerKey === 'anthropic'
       || !!getAuthCredential(auth);
     if (!canLoad) return;
@@ -645,6 +652,7 @@ function ProviderForm({
   async function test() {
     setTestStatus('testing');
     setTestMsg('');
+    setGatewayHint('');
     try {
       const key = apiKey || getAuthCredential(auth);
       const ids = await fetchModels(baseUrl, key);
@@ -653,6 +661,9 @@ function ProviderForm({
     } catch (e) {
       setTestStatus('error');
       setTestMsg(e instanceof Error ? e.message : String(e));
+      // A failed fetch to a local gateway cannot tell us why it failed, so probe
+      // separately to say whether OmniRoute is down or just blocking the origin.
+      if (isOmniRoute) setGatewayHint(await diagnoseOmniRouteFailure(baseUrl));
     }
   }
 
@@ -770,7 +781,7 @@ function ProviderForm({
               size="small"
               appearance="subtle"
               title="Fetch available models"
-              disabled={needsKey && !keySet && !apiKey}
+              disabled={keyRequired && !keySet && !apiKey}
               onClick={() => void fetchModels(baseUrl, apiKey || getAuthCredential(auth)).catch(() => undefined)}
             >Refresh</Button>
           </div>
@@ -796,11 +807,14 @@ function ProviderForm({
       )}
 
       {needsKey && (
-        <Field label={supportsOpenRouterOAuth ? 'API Key fallback' : 'API Key'}>
+        <Field
+          label={supportsOpenRouterOAuth ? 'API Key fallback' : isOmniRoute ? 'Gateway key (optional)' : 'API Key'}
+          hint={isOmniRoute ? 'Only needed if you set API_KEY in the gateway’s .env.' : undefined}
+        >
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <Input
               type={showKey ? 'text' : 'password'}
-              placeholder={keySet ? auth.apiKeyMasked : 'Enter API key...'}
+              placeholder={keySet ? auth.apiKeyMasked : isOmniRoute ? 'Leave blank if auth is off...' : 'Enter API key...'}
               value={apiKey}
               onChange={(_, d) => setApiKey(d.value)}
               size="small"
@@ -821,14 +835,14 @@ function ProviderForm({
         <Caption1 style={{
           color: auth.state === 'authenticated'
             ? tokens.colorPaletteGreenForeground1
-            : auth.state === 'unauthenticated' && !needsKey
+            : auth.state === 'unauthenticated' && !keyRequired
             ? tokens.colorPaletteGreenForeground1
             : auth.state === 'error'
             ? tokens.colorPaletteRedForeground1
             : tokens.colorNeutralForeground3,
         }}>
           {auth.state === 'authenticated' ? 'authenticated'
-            : auth.state === 'unauthenticated' && !needsKey ? 'no auth needed'
+            : auth.state === 'unauthenticated' && !keyRequired ? 'no auth needed'
             : auth.error ? `${auth.state}: ${auth.error}`
             : auth.state}
         </Caption1>
@@ -852,6 +866,14 @@ function ProviderForm({
         <MessageBar intent={testStatus === 'ok' ? 'success' : 'error'}>
           <MessageBarBody>
             <Caption1>{testMsg}</Caption1>
+          </MessageBarBody>
+        </MessageBar>
+      )}
+
+      {isOmniRoute && gatewayHint && (
+        <MessageBar intent="warning">
+          <MessageBarBody>
+            <Caption1>{gatewayHint}</Caption1>
           </MessageBarBody>
         </MessageBar>
       )}

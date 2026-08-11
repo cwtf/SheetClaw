@@ -55,7 +55,7 @@ store/index.ts (Zustand)        ← single global store, four slices:
 
 ### Provider adapters
 
-[src/adapters/](src/adapters/) contains three concrete adapters: `OpenAIAdapter`, `AnthropicAdapter`, `OllamaAdapter`. `createAdapter()` routes all OpenAI-compatible providers (openai, deepseek, groq, mistral, together, kimi, glm, qwen, llama, generic) through `OpenAIAdapter`. All adapters implement `LLMClient` (`src/types/llm.ts`) and yield a typed async iterator of streaming events.
+[src/adapters/](src/adapters/) contains three concrete adapters: `OpenAIAdapter`, `AnthropicAdapter`, `OllamaAdapter`. `createAdapter()` routes all OpenAI-compatible providers (openai, deepseek, groq, mistral, together, kimi, glm, qwen, llama, gemini, cerebras, cloudflare, huggingface, generic, omniroute) through `OpenAIAdapter`. `omniroute` targets a self-hosted [OmniRoute](https://github.com/pitbaden/omniroute) gateway on `http://localhost:20128/v1`; like Ollama it is a local server, so its key is optional (`isKeyOptionalProvider`) and [src/adapters/omniroute.ts](src/adapters/omniroute.ts) carries the same "is it down, or is it blocking the origin?" probe. All adapters implement `LLMClient` (`src/types/llm.ts`) and yield a typed async iterator of streaming events.
 
 ### Tool system
 

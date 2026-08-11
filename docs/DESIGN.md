@@ -295,7 +295,7 @@ export interface WebAccessConfig {
 export type ProviderKey =
   | 'ollama' | 'openai' | 'anthropic' | 'generic' | 'deepseek' | 'groq' | 'mistral'
   | 'together' | 'kimi' | 'glm' | 'qwen' | 'llama' | 'gemini' | 'cerebras'
-  | 'cloudflare' | 'huggingface';
+  | 'cloudflare' | 'huggingface' | 'omniroute';
 
 export interface UsageRecord {
   id: string; sessionId: string; turnIndex: number; timestamp: string;
@@ -478,6 +478,7 @@ export interface AppConfig {
 | cerebras | Cerebras | `https://api.cerebras.ai/v1` | `llama-3.3-70b` | apikey | |
 | cloudflare | Cloudflare Workers AI | `https://api.cloudflare.com/client/v4/accounts/YOUR_ACCOUNT_ID/ai/v1` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | apikey | |
 | huggingface | Hugging Face | `https://router.huggingface.co/v1` | `meta-llama/Llama-3.3-70B-Instruct` | apikey | |
+| omniroute | OmniRoute (local gateway) | `http://localhost:20128/v1` | *(blank)* | none | self-hosted gateway; key optional |
 
 Actions:
 - `setProvider(key, patch)` — merge patch, persist to `xl.config.providers`.
@@ -624,7 +625,7 @@ export function createAdapter(cfg: ProviderConfig, auth: string | AuthState = ''
     default:          return new OpenAIAdapter({ apiKey, baseUrl: cfg.baseUrl,
                         provider: cfg.provider, extraHeaders: cfg.headers });
     // default covers: openai, generic, deepseek, groq, mistral, together, kimi,
-    // glm, qwen, llama, gemini, cerebras, cloudflare, huggingface
+    // glm, qwen, llama, gemini, cerebras, cloudflare, huggingface, omniroute
   }
 }
 ```
@@ -1391,7 +1392,7 @@ Four sub-tabs — **Ollama**, **API**, **Search**, and **Appearance** — with a
 
 **Provider form** (shared): "Set as active"/"Active provider" button; provider signup link; native-search caption (`getProviderNativeSearchCaption`); Base URL input (commit on blur, sets enabled); Model field — a freeform Combobox when a model list is available (with Refresh) else a plain input; model lists come from `knownModels` → static fallback lists per provider → live `listModels()` fetch. Fetch behavior: auto-fetch on mount when possible (ollama and anthropic don't need a key; others need a stored credential); OpenAI results are filtered to chat models (prefixes `gpt-`, `o1`, `o3`, `o4`, `chatgpt-`); when the configured model is empty, choose a per-provider preferred default (falling back to OpenRouter-preferred ids or `ids[0]`), and persist `knownModels`. API-key field (password with Show/Clear; Save key button) for all but ollama; **Sign in with OpenRouter** button when provider is `generic` and base URL origin is `https://openrouter.ai` (runs the §8 flow, then saves the credential and refreshes models). Auth status line (green authenticated / "no auth needed" for ollama / red error). **Test connection** = fetch models and report count. Ollama-specific failure help: if the error carries the browser-access sentinel, show the `OLLAMA_ORIGINS` PowerShell command with a Copy button, else suggest `ollama serve`.
 
-**API tab**: provider dropdown (15 entries, with a "Free" checkbox filtering to free-API providers: gemini, groq, cerebras, cloudflare, huggingface, generic) + the provider form. Selecting a provider while the API tab is active immediately makes it the active provider.
+**API tab**: provider dropdown (16 entries, with a "Free" checkbox filtering to free-API providers: gemini, groq, cerebras, cloudflare, huggingface, generic, omniroute) + the provider form. Selecting a provider while the API tab is active immediately makes it the active provider.
 
 **Search tab** (`SearchSettingsForm`): a permanent informational caption stating that the keyless catalogues (Wikipedia, Wikidata, World Bank, IMF, Eurostat, ECB, UN SDG, CKAN, data.gov.my, data.gov.sg, Open-Meteo) are **always available to the agent and need no setup** — this tab only adds keyed internet search. Then: status MessageBar from `getSearchSettingsStatusText` (native tier → success intent); provider Select with options None (= keyless only) / the keyed-or-self-hosted providers (tavily, google-cse, jina, searxng) — **no keyless bundle option**; per-provider caption (keyed: "Search uses your own provider key. It is off for each new session until you enable it in Chat."); signup link; API-key field when `requiresKey`; Engine ID (cx) field when `requiresEngineId`; Base URL override; "Allow reader fallback for fetched URLs" checkbox + explanation; **Save key** (also sets the provider active in webAccess) and **Test key/Test search** (runs a 1-result search for `'spreadsheet public data'` and reports). Clearing a key resets webAccess.provider to `'none'` and turns the chat toggle off (keyless search continues regardless).
 

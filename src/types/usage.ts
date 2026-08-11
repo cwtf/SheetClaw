@@ -14,7 +14,8 @@ export type ProviderKey =
   | 'gemini'
   | 'cerebras'
   | 'cloudflare'
-  | 'huggingface';
+  | 'huggingface'
+  | 'omniroute';
 
 export interface UsageRecord {
   id: string;

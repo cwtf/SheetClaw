@@ -54,3 +54,30 @@ describe('theme persistence', () => {
     expect(useStore.getState().appConfig.theme).toBe('dark');
   });
 });
+
+describe('OmniRoute provider defaults', () => {
+  it('ships a keyless local-gateway config pointing at OmniRoute', () => {
+    const cfg = useStore.getState().providers.omniroute;
+
+    expect(cfg.baseUrl).toBe('http://localhost:20128/v1');
+    expect(cfg.authMode).toBe('none');
+    expect(cfg.enabled).toBe(false);
+    // The model list is whatever the user wired into their own gateway, so
+    // there is nothing sensible to preselect.
+    expect(cfg.model).toBe('');
+  });
+
+  it('reports readiness without a stored credential', () => {
+    expect(useStore.getState().isProviderReady('omniroute')).toBe(true);
+  });
+
+  it('survives a round trip through storage alongside older stored providers', () => {
+    localStorage.setItem(
+      'xl.config.providers',
+      JSON.stringify({ _v: 1, ollama: useStore.getState().providers.ollama }),
+    );
+    useStore.getState().loadConfigFromStorage();
+
+    expect(useStore.getState().providers.omniroute.baseUrl).toBe('http://localhost:20128/v1');
+  });
+});

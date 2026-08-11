@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { AuthState, ProviderKey, SearchProviderId, WebAccessProvider } from '../../types';
 import { getSearchProvider, SEARCH_PROVIDER_IDS } from '../../web/providers';
+import { isKeyOptionalProvider } from '../../adapters';
 import { storage } from '../storage';
 import { encryptSecret, decryptSecret, isEncryptedSecret } from '../../auth/secureStore';
 
@@ -121,6 +122,7 @@ const ALL_PROVIDERS: ProviderKey[] = [
   'cerebras',
   'cloudflare',
   'huggingface',
+  'omniroute',
 ];
 
 const SEARCH_PROVIDERS: SearchProviderId[] = SEARCH_PROVIDER_IDS;
@@ -225,7 +227,9 @@ export const createAuthSlice: StateCreator<AuthSlice> = (set, get) => ({
   isProviderReady(provider) {
     const auth = get().authStates[provider];
     const s = auth?.state;
-    if (provider === 'ollama') return s === 'unauthenticated' || s === 'authenticated';
+    // Local-server providers need no credential, so an untouched auth state is
+    // still ready; a saved key (OmniRoute's optional gateway key) is fine too.
+    if (isKeyOptionalProvider(provider)) return s === 'unauthenticated' || s === 'authenticated';
     if (auth?.expiresAt && Date.parse(auth.expiresAt) <= Date.now() + 60_000) return false;
     return s === 'authenticated';
   },

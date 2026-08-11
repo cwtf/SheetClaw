@@ -266,8 +266,11 @@ export class OpenAIAdapter implements LLMClient {
   }
 
   #authHeaders(): Record<string, string> {
+    // A local gateway with auth disabled can reject an empty bearer outright,
+    // so send no Authorization at all rather than `Bearer `. Remote providers
+    // would have failed on an empty key either way.
     return {
-      Authorization: `Bearer ${this.cfg.apiKey}`,
+      ...(this.cfg.apiKey ? { Authorization: `Bearer ${this.cfg.apiKey}` } : {}),
       ...this.cfg.extraHeaders,
     };
   }

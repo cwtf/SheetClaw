@@ -1,5 +1,6 @@
 import type { StateCreator } from 'zustand';
 import type { ProviderConfig, ProviderKey, WebAccessConfig } from '../../types';
+import { OMNIROUTE_DEFAULT_BASE_URL } from '../../adapters/omniroute';
 import { KEYLESS_BUNDLE_ID, keylessSourceIds } from '../../web/providers';
 import { storage } from '../storage';
 
@@ -181,6 +182,18 @@ const DEFAULT_PROVIDERS: Record<ProviderKey, ProviderConfig> = {
     model: 'meta-llama/Llama-3.3-70B-Instruct',
     authMode: 'apikey',
     authStateRef: 'xl.auth.huggingface',
+    contextLimits: { maxContextTokens: 128000, historyTokenCap: 100000, maxInlineSheetCells: 5000 },
+  },
+  omniroute: {
+    provider: 'omniroute',
+    label: 'OmniRoute (local gateway)',
+    enabled: false,
+    baseUrl: OMNIROUTE_DEFAULT_BASE_URL,
+    // Left blank on purpose: the model list depends entirely on which upstream
+    // providers the user wired into their own gateway, so it is fetched live.
+    model: '',
+    authMode: 'none',
+    authStateRef: 'xl.auth.omniroute',
     contextLimits: { maxContextTokens: 128000, historyTokenCap: 100000, maxInlineSheetCells: 5000 },
   },
 };
